@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.3] - 2022-09-09
+
+### Fixed
+
+- Version update because of wrong version publish
+
 ## [1.7.2] - 2022-09-09
 
 ### Fixed
