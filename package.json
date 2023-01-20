@@ -192,7 +192,7 @@
                 "csharpextensions.includeNamespaces": {
                     "type": "boolean",
                     "default": true,
-                    "description": "If created classes should include default namespaces"
+                    "description": "If created classes should include default usings"
                 },
                 "csharpextensions.useFileScopedNamespace": {
                     "type": "boolean",
