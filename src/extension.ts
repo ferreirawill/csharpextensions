@@ -3,23 +3,27 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { EOL } from 'os';
 
-import Template from './template/template';
-import CsTemplate from './template/csTemplate';
-import CshtmlTemplate from './template/cshtmlTemplate';
-import ReswTemplate from './template/reswTemplate';
-import XamlTemplate from './template/xamlTemplate';
 import CodeActionProvider from './codeActionProvider';
-import { showAndLogErrorMessage } from './util';
-
+import { log } from './util';
+import { TemplateType } from './template/templateType';
+import CommandExecutor from './command/commandExecutor';
 
 export function activate(context: vscode.ExtensionContext): void {
     const extension = Extension.GetInstance();
 
-    Extension.GetKnownTemplates().forEach(template => {
+    // Extension.GetKnownTemplates().forEach(template => {
+    //     context.subscriptions.push(
+    //         vscode.commands.registerCommand(
+    //             template.getCommand(),
+    //             async (options: RegisterCommandCallbackArgument) => await extension.createFromTemplate(options, template)
+    //         )
+    //     );
+    // });
+    Extension.GetKnonwCommands().forEach((commandExecutor, key)=> {
         context.subscriptions.push(
             vscode.commands.registerCommand(
-                template.getCommand(),
-                async (options: RegisterCommandCallbackArgument) => await extension.createFromTemplate(options, template)
+                commandExecutor.getCommand(),
+                async (options: RegisterCommandCallbackArgument) => await extension.startExecutor(options, key, commandExecutor)
             )
         );
     });
@@ -48,7 +52,7 @@ export class Extension {
             ? vscode.workspace.workspaceFolders[0].uri.fsPath : undefined;
     }
 
-    public async createFromTemplate(options: RegisterCommandCallbackArgument, template: Template): Promise<void> {
+    public async startExecutor(options: RegisterCommandCallbackArgument, hintName: string, executor: CommandExecutor): Promise<void> {
         const incomingPath = this._getIncomingPath(options);
 
         if (!incomingPath) {
@@ -68,39 +72,25 @@ export class Extension {
         let newFilename = await vscode.window.showInputBox({
             ignoreFocusOut: true,
             prompt: 'Please enter a name for the new file(s)',
-            value: `New${template.getName()}`
+            value: `New${hintName}`
         });
 
-        if (typeof newFilename === 'undefined' || newFilename === '') {
-            console.info('Filename request: User did not provide any input');
+        if (typeof newFilename === 'undefined' || newFilename.trim() === '') {
+            log('Filename request: User did not provide any input');
 
             return;
         }
 
         if (newFilename.endsWith('.cs')) newFilename = newFilename.substring(0, newFilename.length - 3);
 
-        const pathWithoutExtension = `${incomingPath}${path.sep}${newFilename}`;
-        const existingFiles = await template.getExistingFiles(pathWithoutExtension);
-
-        if (existingFiles.length) {
-            vscode.window.showErrorMessage(`File(s) already exists: ${EOL}${existingFiles.join(EOL)}`);
-
-            return;
-        }
-
         const templatesPath = path.join(extension.extensionPath, Extension.TemplatesPath);
+        const pathWithoutExtension = `${incomingPath}${path.sep}${newFilename}`;
 
-        try {
-            await template.create(templatesPath, pathWithoutExtension, newFilename);
-        } catch (errCreating) {
-            const message = `Error trying to create new ${template.getName()} at ${pathWithoutExtension}`;
-            
-            showAndLogErrorMessage(message, errCreating);
-        }
+        executor.execute(templatesPath, pathWithoutExtension, newFilename);
     }
 
     private static TemplatesPath = 'templates';
-    private static KnownTemplates: Map<string, Template>;
+    private static KnownCommands: Map<string, CommandExecutor>;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private static CurrentVscodeExtension: vscode.Extension<any> | undefined = undefined;
     private static Instance: Extension;
@@ -134,35 +124,28 @@ export class Extension {
         return this.CurrentVscodeExtension;
     }
 
-    static GetKnownTemplates(): Map<string, Template> {
-        if (!this.KnownTemplates) {
-            this.KnownTemplates = new Map();
-
-            this.KnownTemplates.set('class', new CsTemplate('Class', 'createClass'));
-            this.KnownTemplates.set('interface', new CsTemplate('Interface', 'createInterface'));
-            this.KnownTemplates.set('enum', new CsTemplate('Enum', 'createEnum'));
-            this.KnownTemplates.set('struct', new CsTemplate('Struct', 'createStruct'));
-            this.KnownTemplates.set('controller', new CsTemplate('Controller', 'createController', [
-                'System.Diagnostics',
-                'Microsoft.AspNetCore.Mvc',
-                'Microsoft.Extensions.Logging',
-            ]));
-            this.KnownTemplates.set('apicontroller', new CsTemplate('ApiController', 'createApiController', ['Microsoft.AspNetCore.Mvc']));
-            this.KnownTemplates.set('razor_page', new CshtmlTemplate('Razor_Page', 'createRazorPage', [
-                'Microsoft.AspNetCore.Mvc',
-                'Microsoft.AspNetCore.Mvc.RazorPages',
-                'Microsoft.Extensions.Logging',
-            ]));
-            this.KnownTemplates.set('xunit', new CsTemplate('XUnit', 'createXUnitTest', ['Xunit']));
-            this.KnownTemplates.set('nunit', new CsTemplate('NUnit', 'createNUnitTest', ['NUnit.Framework']));
-            this.KnownTemplates.set('mstest', new CsTemplate('MSTest', 'createMSTest', ['Microsoft.VisualStudio.TestTools.UnitTesting']));
-            this.KnownTemplates.set('uwp_page', new XamlTemplate('UWP_Page', 'createUwpPage'));
-            this.KnownTemplates.set('uwp_window', new XamlTemplate('UWP_Window', 'createUwpWindow'));
-            this.KnownTemplates.set('uwp_usercontrol', new XamlTemplate('UWP_UserControl', 'createUwpUserControl'));
-            this.KnownTemplates.set('uwp_resource', new ReswTemplate('UWP_Resource', 'createUwpResourceFile'));
+    static GetKnonwCommands(): Map<string, CommandExecutor> {
+        if (this.KnownCommands) {
+            return this.KnownCommands;
         }
 
-        return this.KnownTemplates;
+        this.KnownCommands = new Map();
+        this.KnownCommands.set('Class', new CommandExecutor('createClass', [TemplateType.Class]));
+        this.KnownCommands.set('Interface', new CommandExecutor('createInterface', [TemplateType.Inteface]));
+        this.KnownCommands.set('Enum', new CommandExecutor('createEnum', [TemplateType.Enum]));
+        this.KnownCommands.set('Struct', new CommandExecutor('createStruct', [TemplateType.Struct]));
+        this.KnownCommands.set('Controller', new CommandExecutor('createController', [TemplateType.Controller]));
+        this.KnownCommands.set('ApiController', new CommandExecutor('createApiController', [TemplateType.ApiController]));
+        this.KnownCommands.set('Razor_Page', new CommandExecutor('createRazorPage', [ TemplateType.RazorPageClass, TemplateType.RazorPageTemplate]));
+        this.KnownCommands.set('XUnit', new CommandExecutor('createXUnitTest', [TemplateType.XUnit]));
+        this.KnownCommands.set('NUnit', new CommandExecutor('createNUnitTest', [TemplateType.NUnit]));
+        this.KnownCommands.set('MSTest', new CommandExecutor('createMSTest', [TemplateType.MsTest]));
+        this.KnownCommands.set('UWP_Page', new CommandExecutor('createUwpPage', [TemplateType.UWPPageClass, TemplateType.UWPPageXml]));
+        this.KnownCommands.set('UWP_Window', new CommandExecutor('createUwpWindow', [TemplateType.UWPWindowClass, TemplateType.UWPWindowXml]));
+        this.KnownCommands.set('UWP_Usercontrol', new CommandExecutor('createUwpUserControl', [TemplateType.UWPUserControllClass, TemplateType.UWPUserControllXml]));
+        this.KnownCommands.set('UWP_Resource', new CommandExecutor('createUwpResourceFile', [TemplateType.UWPResource]));
+
+        return this.KnownCommands;
     }
 }
 

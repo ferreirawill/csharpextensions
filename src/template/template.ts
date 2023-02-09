@@ -1,133 +1,67 @@
-import * as vscode from 'vscode';
-
-import { promises as fs } from 'fs';
+import { sortBy, uniq } from 'lodash';
 import { EOL } from 'os';
 import * as path from 'path';
-import { sortBy, uniq } from 'lodash';
 
-import { ExtensionError } from '../util';
-import NamespaceDetector from '../namespaceDetector';
-import fileScopedNamespaceConverter from '../fileScopedNamespaceConverter';
+import { TemplateType } from './templateType';
+import { FileScopedNamespaceConverter } from '../fileScopedNamespaceConverter';
 
-export default abstract class Template {
+export default class Template {
     private static readonly ClassnameRegex = new RegExp(/\${classname}/, 'g');
     private static readonly NamespaceRegex = new RegExp(/\${namespace}/, 'g');
     private static readonly EolRegex = new RegExp(/\r?\n/g);
 
     private _name: string;
-    private _command: string;
-    private _requiredUsings: string[];
+    private _type: TemplateType;
+    private _content: string;
+    private _fileScopeConverter: FileScopedNamespaceConverter;
 
-    constructor(name: string, command: string, requiredUsings: string[] = []) {
-        this._name = name;
-        this._command = command;
-        this._requiredUsings = requiredUsings;
+    constructor(type: TemplateType, content: string, fileScopeConverter: FileScopedNamespaceConverter) {
+        this._name = Template.RetriveName(type);
+        this._type = type;
+        this._content = content;
+        this._fileScopeConverter = fileScopeConverter;
     }
 
     public getName(): string { return this._name; }
-    public getCommand(): string {
-        return `csharpextensions.${this._command}`;
+    public getType(): TemplateType { return this._type; }
+    public getContent(): string { return this._content; }
+
+    public findCursorInTemplate(filename: string, namespace: string, includeNamespaces: boolean, useFileScopedNamespace: boolean): number[] | null {
+        const content = this._partialBuild(filename, namespace, includeNamespaces, useFileScopedNamespace);
+        const cursorPos = content.indexOf('${cursor}');
+        const preCursor = content.substring(0, cursorPos);
+        const matchesForPreCursor = preCursor.match(/\n/gi);
+
+        if (matchesForPreCursor === null) return null;
+
+        const lineNum = matchesForPreCursor.length;
+        const charNum = preCursor.substring(preCursor.lastIndexOf('\n')).length;
+
+        return [lineNum, charNum];
     }
 
-    public async getExistingFiles(pathWithoutExtension: string): Promise<string[]> {
-        const extensions = this.getExtensions();
-        const existingFiles: string[] = [];
+    public build(filename: string, namespace: string, includeNamespaces: boolean, useFileScopedNamespace: boolean, eol: string = EOL): string {
+        return this._partialBuild(filename, namespace, includeNamespaces, useFileScopedNamespace, eol)
+            .replace('${cursor}', '')
+            .replace(Template.EolRegex, eol);
+    }
 
-        for (let i = 0; i < extensions.length; i++) {
-            const fullPath = `${pathWithoutExtension}${extensions[i]}`;
-
-            try {
-                await fs.access(fullPath);
-
-                existingFiles.push(fullPath);
-            } catch { }
+    private _partialBuild(filename: string, namespace: string, includeNamespaces: boolean, useFileScopedNamespace: boolean, eol: string = EOL) {
+        let content = this._content;
+        if (useFileScopedNamespace) {
+            content = this._fileScopeConverter.getFileScopedNamespaceFormOfTemplate(this._content);
         }
 
-        return existingFiles;
+        content = content
+            .replace(Template.NamespaceRegex, namespace)
+            .replace(Template.ClassnameRegex, filename)
+            .replace('${namespaces}', this.HandleUsings(includeNamespaces, eol));
+
+        return content;
     }
 
-    protected _getFileName(): string {
-        // Template file names are always in lowercase, but names can have uppercase characters
-        return this._name.toLowerCase();
-    }
-
-    private async getNamespace(pathWithoutExtension: string): Promise<string> {
-        const namespaceDetector = new NamespaceDetector(pathWithoutExtension);
-
-        return await namespaceDetector.getNamespace();
-    }
-
-    private _getEolSetting(): string {
-        const eolSetting = vscode.workspace.getConfiguration().get('files.eol', EOL);
-
-        switch (eolSetting) {
-            case '\n':
-            case '\r\n':
-                return eolSetting;
-            case 'auto':
-            default:
-                return EOL;
-        }
-    }
-
-    protected async _createFile(templatePath: string, filePath: string, filename: string): Promise<void> {
-        let doc;
-
-        try {
-            doc = await fs.readFile(templatePath, 'utf-8');
-        } catch (errReading) {
-            throw new ExtensionError(`Could not read template file from '${templatePath}'`, errReading);
-        }
-
-        let text = doc;
-        let cursorPosition: vscode.Position | null;
-
-        try {
-            const namespace = await this.getNamespace(filePath);
-
-            text = await fileScopedNamespaceConverter.getFileScopedNamespaceFormOfTemplateIfNecessary(text, filePath);
-
-            text = text
-                .replace(Template.NamespaceRegex, namespace)
-                .replace(Template.ClassnameRegex, filename)
-                .replace('${namespaces}', this.getUsings())
-                .replace(Template.EolRegex, this._getEolSetting());
-
-            cursorPosition = this._findCursorInTemplate(text);
-
-            text = text.replace('${cursor}', '');
-        } catch (errBuildingText) {
-            throw new ExtensionError('Error trying to build text', errBuildingText);
-        }
-
-        try {
-            await fs.writeFile(filePath, text);
-        } catch (errWritingFile) {
-            throw new ExtensionError(`Error trying to write to '${filePath}'`, errWritingFile);
-        }
-
-        try {
-            const openedDoc = await vscode.workspace.openTextDocument(filePath);
-            const editor = await vscode.window.showTextDocument(openedDoc);
-
-            if (cursorPosition) {
-                const newSelection = new vscode.Selection(cursorPosition, cursorPosition);
-
-                editor.selection = newSelection;
-            }
-        } catch (errOpeningFile) {
-            throw new ExtensionError(`Error trying to open from '${filePath}'`, errOpeningFile);
-        }
-    }
-
-    protected _getTemplatePath(templatesPath: string, templateName: string): string {
-        return path.join(templatesPath, `${templateName}.tmpl`);
-    }
-
-    private getUsings(): string {
-        const includeNamespaces = vscode.workspace.getConfiguration().get('csharpextensions.includeNamespaces', true);
-        let usings = this._requiredUsings;
-
+    private HandleUsings(includeNamespaces: boolean, eol: string = EOL): string {
+        let usings = this.getRequiredUsings();
         if (includeNamespaces) usings = usings.concat(this.getOptionalUsings());
 
         if (!usings.length) return '';
@@ -136,25 +70,191 @@ export default abstract class Template {
         const sortedUsings = sortBy(uniqueUsings, [(using) => !using.startsWith('System'), (using) => using]);
         const joinedUsings = sortedUsings
             .map(using => `using ${using};`)
-            .join(EOL);
+            .join(eol);
 
-        return `${joinedUsings}${EOL}${EOL}`;
+        return `${joinedUsings}${eol}${eol}`;
     }
 
-    protected abstract getExtensions(): string[];
-    protected abstract getOptionalUsings(): string[];
-    public abstract create(templatesPath: string, pathWithoutExtension: string, filename: string): Promise<void>;
-
-    private _findCursorInTemplate(text: string): vscode.Position | null {
-        const cursorPos = text.indexOf('${cursor}');
-        const preCursor = text.substr(0, cursorPos);
-        const matchesForPreCursor = preCursor.match(/\n/gi);
-
-        if (matchesForPreCursor === null) return null;
-
-        const lineNum = matchesForPreCursor.length;
-        const charNum = preCursor.substr(preCursor.lastIndexOf('\n')).length;
-
-        return new vscode.Position(lineNum, charNum);
+    public getRequiredUsings(): string[] {
+        switch (this._type) {
+            case TemplateType.Class:
+            case TemplateType.Inteface:
+            case TemplateType.Enum:
+            case TemplateType.Struct:
+                return [];
+            case TemplateType.Controller:
+                return [
+                    'System.Diagnostics',
+                    'Microsoft.AspNetCore.Mvc',
+                    'Microsoft.Extensions.Logging',
+                ];
+            case TemplateType.ApiController:
+                return ['Microsoft.AspNetCore.Mvc'];
+            case TemplateType.MsTest:
+                return ['Microsoft.VisualStudio.TestTools.UnitTesting'];
+            case TemplateType.NUnit:
+                return ['NUnit.Framework'];
+            case TemplateType.XUnit:
+                return ['Xunit'];
+            case TemplateType.RazorPageClass:
+                return [
+                    'Microsoft.AspNetCore.Mvc',
+                    'Microsoft.AspNetCore.Mvc.RazorPages',
+                    'Microsoft.Extensions.Logging',
+                ];
+            case TemplateType.UWPPageClass:
+            case TemplateType.UWPUserControllClass:
+            case TemplateType.UWPWindowClass:
+            case TemplateType.UWPUserControllXml:
+            case TemplateType.UWPWindowXml:
+            case TemplateType.UWPPageXml:
+            case TemplateType.RazorPageTemplate:
+            case TemplateType.UWPResource:
+            default:
+                return [];
+        }
     }
+
+    public getOptionalUsings(): string[] {
+
+        switch (this._type) {
+            case TemplateType.Class:
+            case TemplateType.Inteface:
+            case TemplateType.Enum:
+            case TemplateType.Struct:
+            case TemplateType.Controller:
+            case TemplateType.ApiController:
+            case TemplateType.MsTest:
+            case TemplateType.NUnit:
+            case TemplateType.XUnit:
+            case TemplateType.RazorPageClass:
+                return [
+                    'System',
+                    'System.Collections.Generic',
+                    'System.Linq',
+                    'System.Threading.Tasks',
+                ];
+            case TemplateType.UWPPageClass:
+            case TemplateType.UWPUserControllClass:
+            case TemplateType.UWPWindowClass:
+                return [
+                    'System',
+                    'System.Collections.Generic',
+                    'System.Linq',
+                    'System.Text',
+                    'System.Threading.Tasks',
+                    'System.Windows',
+                    'System.Windows.Controls',
+                    'System.Windows.Data',
+                    'System.Windows.Documents',
+                    'System.Windows.Input',
+                    'System.Windows.Media',
+                    'System.Windows.Media.Imaging',
+                    'System.Windows.Navigation',
+                    'System.Windows.Shapes',
+                ];
+
+            case TemplateType.UWPUserControllXml:
+            case TemplateType.UWPWindowXml:
+            case TemplateType.UWPPageXml:
+            case TemplateType.RazorPageTemplate:
+            case TemplateType.UWPResource:
+            default:
+                return [];
+        }
+    }
+
+    public static getExtension(type: TemplateType ): string {
+        switch (type) {
+            case TemplateType.Class:
+            case TemplateType.Inteface:
+            case TemplateType.Enum:
+            case TemplateType.Struct:
+            case TemplateType.Controller:
+            case TemplateType.ApiController:
+            case TemplateType.MsTest:
+            case TemplateType.NUnit:
+            case TemplateType.XUnit:
+            case TemplateType.RazorPageClass:
+                return '.cs';
+            case TemplateType.UWPPageClass:
+            case TemplateType.UWPUserControllClass:
+            case TemplateType.UWPWindowClass:
+                return '.xaml.cs';
+
+            case TemplateType.UWPResource:
+                return '.resw';
+            case TemplateType.RazorPageTemplate:
+                return '.cshtml';
+
+            case TemplateType.UWPPageXml:
+            case TemplateType.UWPUserControllXml:
+            case TemplateType.UWPWindowXml:
+                return '.xaml';
+        }
+    }
+
+    public static RetriveName(type: TemplateType): string {
+        switch (type) {
+            case TemplateType.Class:
+                return 'class';
+            case TemplateType.Inteface:
+                return 'interface';
+            case TemplateType.Enum:
+                return 'enum';
+            case TemplateType.Struct:
+                return 'struct';
+            case TemplateType.Controller:
+                return 'controller';
+            case TemplateType.ApiController:
+                return 'apicontroller';
+            case TemplateType.MsTest:
+                return 'mstest';
+            case TemplateType.NUnit:
+                return 'nunit';
+            case TemplateType.XUnit:
+                return 'xunit';
+            case TemplateType.RazorPageClass:
+                return 'razor_page.cs';
+            case TemplateType.UWPPageClass:
+                return 'uwp_page.cs';
+            case TemplateType.UWPUserControllClass:
+                return 'uwp_usercontrol.cs';
+            case TemplateType.UWPWindowClass:
+                return 'uwp_window.cs';
+            case TemplateType.UWPResource:
+                return 'uwp_resource';
+            case TemplateType.RazorPageTemplate:
+                return 'razor_page';
+            case TemplateType.UWPPageXml:
+                return 'uwp_page';
+            case TemplateType.UWPUserControllXml:
+                return 'uwp_usercontrol';
+            case TemplateType.UWPWindowXml:
+                return 'uwp_window';
+        }
+    }
+
+    public static getTemplatePath(templatesPath: string, type: TemplateType): string {
+        let templateName = Template.RetriveName(type).toLowerCase();
+
+        if (templateName.endsWith('.cs')) {
+            return path.join(templatesPath, `${templateName}.tmpl`);
+        }
+
+        switch (type) {
+            case TemplateType.UWPPageClass:
+            case TemplateType.UWPUserControllClass:
+            case TemplateType.UWPWindowClass:
+            case TemplateType.RazorPageClass:
+                templateName = `${templateName}.cs`;
+                break;
+
+            default:
+                break;
+        }
+
+        return path.join(templatesPath, `${templateName}.tmpl`);
+    }
+
 }

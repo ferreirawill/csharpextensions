@@ -30,7 +30,7 @@ export class FileScopedNamespaceConverter {
      * @param filePath The path of the file to check for
      * @returns If the 'file scoped namespace' feature should be used
      */
-    private async shouldUseFileScopedNamespace(filePath: string): Promise<boolean> {
+    public async shouldUseFileScopedNamespace(filePath: string): Promise<boolean> {
         if (!filePath.endsWith('.cs')) return false;
         if (!workspace.getConfiguration().get<boolean>('csharpextensions.useFileScopedNamespace', false)) return false;
 
@@ -71,7 +71,7 @@ export class FileScopedNamespaceConverter {
      * 
      * @param template The content of the C# template file.
      */
-    private getFileScopedNamespaceFormOfTemplate(template: string): string {
+    public getFileScopedNamespaceFormOfTemplate(template: string): string {
         const result = template
             .replace(FileScopedNamespaceConverter.NamespaceBracesRegex, '')
             .replace(FileScopedNamespaceConverter.NamespaceRegex, ';');
