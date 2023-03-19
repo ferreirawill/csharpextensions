@@ -55,12 +55,12 @@ export default class Template {
         content = content
             .replace(Template.NamespaceRegex, namespace)
             .replace(Template.ClassnameRegex, filename)
-            .replace('${namespaces}', this.HandleUsings(includeNamespaces, eol));
+            .replace('${namespaces}', this._handleUsings(includeNamespaces, eol));
 
         return content;
     }
 
-    private HandleUsings(includeNamespaces: boolean, eol: string = EOL): string {
+    private _handleUsings(includeNamespaces: boolean, eol: string = EOL): string {
         let usings = this.getRequiredUsings();
         if (includeNamespaces) usings = usings.concat(this.getOptionalUsings());
 
@@ -236,23 +236,7 @@ export default class Template {
     }
 
     public static getTemplatePath(templatesPath: string, type: TemplateType): string {
-        let templateName = Template.RetriveName(type).toLowerCase();
-
-        if (templateName.endsWith('.cs')) {
-            return path.join(templatesPath, `${templateName}.tmpl`);
-        }
-
-        switch (type) {
-            case TemplateType.UWPPageClass:
-            case TemplateType.UWPUserControllClass:
-            case TemplateType.UWPWindowClass:
-            case TemplateType.RazorPageClass:
-                templateName = `${templateName}.cs`;
-                break;
-
-            default:
-                break;
-        }
+        const templateName = Template.RetriveName(type).toLowerCase();
 
         return path.join(templatesPath, `${templateName}.tmpl`);
     }
