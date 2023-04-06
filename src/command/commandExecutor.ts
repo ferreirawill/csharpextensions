@@ -7,6 +7,7 @@ import Template from '../template/template';
 import FileHandler from '../io/fileHandler';
 import NamespaceDetector from '../namespaceDetector';
 import fileScopedNamespaceConverter from '../fileScopedNamespaceConverter';
+import TemplateConfiguration from '../template/templateConfiguration';
 
 export default class CommandExecutor {
     private _command: string;
@@ -43,12 +44,11 @@ export default class CommandExecutor {
             return;
         }
 
-        const includeNamespaces = vscode.workspace.getConfiguration().get('csharpextensions.includeNamespaces', true);
-        const eolSettings = this._getEolSetting();
         this._templates.forEach(async templateType => {
             const templatePath = Template.getTemplatePath(templatesPath, templateType);
             const templateContent = await FileHandler.read(templatePath);
-            const template = new Template(templateType, templateContent, fileScopedNamespaceConverter);
+            const templateConf = TemplateConfiguration.create(templateType, vscode.workspace.getConfiguration());
+            const template = new Template(templateType, templateContent, fileScopedNamespaceConverter, templateConf);
             const namespaceDetector = new NamespaceDetector(pathWithoutExtension);
             const namespace = await namespaceDetector.getNamespace();
             const destinationFilePath = `${pathWithoutExtension}${Template.getExtension(template.getType())}`;
@@ -58,11 +58,11 @@ export default class CommandExecutor {
                 useFileScopedNamespace = await fileScopedNamespaceConverter.shouldUseFileScopedNamespace(destinationFilePath);
             }
 
-            const fileContent = template.build(newFilename, namespace, includeNamespaces, useFileScopedNamespace, eolSettings);
+            const fileContent = template.build(newFilename, namespace, useFileScopedNamespace);
 
             await FileHandler.write(destinationFilePath, fileContent);
 
-            const cursorPositionArray = template.findCursorInTemplate(newFilename, namespace, includeNamespaces, useFileScopedNamespace);
+            const cursorPositionArray = template.findCursorInTemplate(newFilename, namespace, useFileScopedNamespace);
 
             let cursorPosition = undefined;
             if (cursorPositionArray) {
@@ -71,19 +71,6 @@ export default class CommandExecutor {
 
             this._openFile(destinationFilePath, cursorPosition);
         });
-    }
-
-    private _getEolSetting(): string {
-        const eolSetting = vscode.workspace.getConfiguration().get('files.eol', EOL);
-
-        switch (eolSetting) {
-            case '\n':
-            case '\r\n':
-                return eolSetting;
-            case 'auto':
-            default:
-                return EOL;
-        }
     }
 
     private async _openFile(filePath: string, cursorPosition: vscode.Position | undefined): Promise<void> {

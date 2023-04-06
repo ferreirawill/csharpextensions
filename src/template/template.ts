@@ -1,9 +1,9 @@
 import { sortBy, uniq } from 'lodash';
-import { EOL } from 'os';
 import * as path from 'path';
 
 import { TemplateType } from './templateType';
 import { FileScopedNamespaceConverter } from '../fileScopedNamespaceConverter';
+import TemplateConfiguration from './templateConfiguration';
 
 export default class Template {
     private static readonly ClassnameRegex = new RegExp(/\${classname}/, 'g');
@@ -14,20 +14,23 @@ export default class Template {
     private _type: TemplateType;
     private _content: string;
     private _fileScopeConverter: FileScopedNamespaceConverter;
+    private _configuration: TemplateConfiguration;
 
-    constructor(type: TemplateType, content: string, fileScopeConverter: FileScopedNamespaceConverter) {
+    constructor(type: TemplateType, content: string, fileScopeConverter: FileScopedNamespaceConverter, configuration: TemplateConfiguration) {
         this._name = Template.RetriveName(type);
         this._type = type;
         this._content = content;
         this._fileScopeConverter = fileScopeConverter;
+        this._configuration = configuration;
     }
 
     public getName(): string { return this._name; }
     public getType(): TemplateType { return this._type; }
     public getContent(): string { return this._content; }
+    public getConfiguration(): TemplateConfiguration { return this._configuration; }
 
-    public findCursorInTemplate(filename: string, namespace: string, includeNamespaces: boolean, useFileScopedNamespace: boolean): number[] | null {
-        const content = this._partialBuild(filename, namespace, includeNamespaces, useFileScopedNamespace);
+    public findCursorInTemplate(filename: string, namespace: string, useFileScopedNamespace: boolean): number[] | null {
+        const content = this._partialBuild(filename, namespace, useFileScopedNamespace);
         const cursorPos = content.indexOf('${cursor}');
         const preCursor = content.substring(0, cursorPos);
         const matchesForPreCursor = preCursor.match(/\n/gi);
@@ -40,13 +43,13 @@ export default class Template {
         return [lineNum, charNum];
     }
 
-    public build(filename: string, namespace: string, includeNamespaces: boolean, useFileScopedNamespace: boolean, eol: string = EOL): string {
-        return this._partialBuild(filename, namespace, includeNamespaces, useFileScopedNamespace, eol)
+    public build(filename: string, namespace: string, useFileScopedNamespace: boolean): string {
+        return this._partialBuild(filename, namespace, useFileScopedNamespace)
             .replace('${cursor}', '')
-            .replace(Template.EolRegex, eol);
+            .replace(Template.EolRegex, this._configuration.getEolSettings());
     }
 
-    private _partialBuild(filename: string, namespace: string, includeNamespaces: boolean, useFileScopedNamespace: boolean, eol: string = EOL) {
+    private _partialBuild(filename: string, namespace: string, useFileScopedNamespace: boolean) {
         let content = this._content;
         if (useFileScopedNamespace) {
             content = this._fileScopeConverter.getFileScopedNamespaceFormOfTemplate(this._content);
@@ -55,14 +58,16 @@ export default class Template {
         content = content
             .replace(Template.NamespaceRegex, namespace)
             .replace(Template.ClassnameRegex, filename)
-            .replace('${namespaces}', this._handleUsings(includeNamespaces, eol));
+            .replace('${namespaces}', this._handleUsings());
 
         return content;
     }
 
-    private _handleUsings(includeNamespaces: boolean, eol: string = EOL): string {
-        let usings = this.getRequiredUsings();
-        if (includeNamespaces) usings = usings.concat(this.getOptionalUsings());
+    private _handleUsings(): string {
+        const includeNamespaces = this._configuration.getIncludeNamespaces();
+        const eol = this._configuration.getEolSettings();
+        let usings = this._configuration.getRequiredUsings();
+        if (includeNamespaces) usings = usings.concat(this._configuration.getOptionalUsings());
 
         if (!usings.length) return '';
 
@@ -73,95 +78,6 @@ export default class Template {
             .join(eol);
 
         return `${joinedUsings}${eol}${eol}`;
-    }
-
-    public getRequiredUsings(): string[] {
-        switch (this._type) {
-            case TemplateType.Class:
-            case TemplateType.Inteface:
-            case TemplateType.Enum:
-            case TemplateType.Struct:
-                return [];
-            case TemplateType.Controller:
-                return [
-                    'System.Diagnostics',
-                    'Microsoft.AspNetCore.Mvc',
-                    'Microsoft.Extensions.Logging',
-                ];
-            case TemplateType.ApiController:
-                return ['Microsoft.AspNetCore.Mvc'];
-            case TemplateType.MsTest:
-                return ['Microsoft.VisualStudio.TestTools.UnitTesting'];
-            case TemplateType.NUnit:
-                return ['NUnit.Framework'];
-            case TemplateType.XUnit:
-                return ['Xunit'];
-            case TemplateType.RazorPageClass:
-                return [
-                    'Microsoft.AspNetCore.Mvc',
-                    'Microsoft.AspNetCore.Mvc.RazorPages',
-                    'Microsoft.Extensions.Logging',
-                ];
-            case TemplateType.UWPPageClass:
-            case TemplateType.UWPUserControllClass:
-            case TemplateType.UWPWindowClass:
-            case TemplateType.UWPUserControllXml:
-            case TemplateType.UWPWindowXml:
-            case TemplateType.UWPPageXml:
-            case TemplateType.RazorPageTemplate:
-            case TemplateType.UWPResource:
-            default:
-                return [];
-        }
-    }
-
-    public getOptionalUsings(): string[] {
-
-        switch (this._type) {
-            case TemplateType.Class:
-            case TemplateType.Inteface:
-            case TemplateType.Enum:
-            case TemplateType.Struct:
-            case TemplateType.Controller:
-            case TemplateType.ApiController:
-            case TemplateType.MsTest:
-            case TemplateType.NUnit:
-            case TemplateType.XUnit:
-            case TemplateType.RazorPageClass:
-                return [
-                    'System',
-                    'System.Collections.Generic',
-                    'System.Linq',
-                    'System.Threading.Tasks',
-                ];
-            case TemplateType.UWPPageClass:
-            case TemplateType.UWPUserControllClass:
-            case TemplateType.UWPWindowClass:
-                return [
-                    'System',
-                    'System.Collections.Generic',
-                    'System.Linq',
-                    'System.Text',
-                    'System.Threading.Tasks',
-                    'System.Windows',
-                    'System.Windows.Controls',
-                    'System.Windows.Data',
-                    'System.Windows.Documents',
-                    'System.Windows.Input',
-                    'System.Windows.Media',
-                    'System.Windows.Media.Imaging',
-                    'System.Windows.Navigation',
-                    'System.Windows.Shapes',
-                ];
-
-            case TemplateType.UWPUserControllXml:
-            case TemplateType.UWPWindowXml:
-            case TemplateType.UWPPageXml:
-            case TemplateType.RazorPageTemplate:
-            case TemplateType.UWPResource:
-            default:
-                return [];
-        }
     }
 
     public static getExtension(type: TemplateType ): string {
