@@ -7,19 +7,13 @@ import CodeActionProvider from './codeActionProvider';
 import { log } from './util';
 import { TemplateType } from './template/templateType';
 import CommandExecutor from './command/commandExecutor';
+import statuses from './command/commandExecutorStatus';
+import Maybe from './common/maybe';
 
 export function activate(context: vscode.ExtensionContext): void {
     const extension = Extension.GetInstance();
 
-    // Extension.GetKnownTemplates().forEach(template => {
-    //     context.subscriptions.push(
-    //         vscode.commands.registerCommand(
-    //             template.getCommand(),
-    //             async (options: RegisterCommandCallbackArgument) => await extension.createFromTemplate(options, template)
-    //         )
-    //     );
-    // });
-    Extension.GetKnonwCommands().forEach((commandExecutor, key)=> {
+    Extension.GetKnonwCommands().forEach((commandExecutor, key) => {
         context.subscriptions.push(
             vscode.commands.registerCommand(
                 commandExecutor.getCommand(),
@@ -43,19 +37,26 @@ export function deactivate(): void { /* Nothing to do here */ }
 export class Extension {
     private constructor() { /**/ }
 
-    private _getIncomingPath(options: RegisterCommandCallbackArgument): string | undefined {
+    private _getIncomingPath(options: RegisterCommandCallbackArgument): Maybe<string> {
         if (options) {
-            return options._fsPath || options.fsPath || options.path;
+            return Maybe.some<string>(options._fsPath || options.fsPath || options.path);
         }
 
-        return vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length
-            ? vscode.workspace.workspaceFolders[0].uri.fsPath : undefined;
+        if (vscode.window.activeTextEditor && !vscode.window.activeTextEditor?.document.isUntitled) {
+            return Maybe.some<string>(path.dirname(vscode.window.activeTextEditor?.document.fileName));
+        }
+
+        if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length) {
+            return Maybe.some<string>(vscode.workspace.workspaceFolders[0].uri.fsPath);
+        }
+
+        return Maybe.none<string>();
     }
 
     public async startExecutor(options: RegisterCommandCallbackArgument, hintName: string, executor: CommandExecutor): Promise<void> {
-        const incomingPath = this._getIncomingPath(options);
+        const maybeIncomingPath = this._getIncomingPath(options);
 
-        if (!incomingPath) {
+        if (maybeIncomingPath.isNone()) {
             vscode.window.showErrorMessage(`Could not find the path for this action.${EOL}If this problem persists, please create an issue in the github repository.`);
 
             return;
@@ -83,10 +84,48 @@ export class Extension {
 
         if (newFilename.endsWith('.cs')) newFilename = newFilename.substring(0, newFilename.length - 3);
 
+        const incomingPath = maybeIncomingPath.value();
         const templatesPath = path.join(extension.extensionPath, Extension.TemplatesPath);
         const pathWithoutExtension = `${incomingPath}${path.sep}${newFilename}`;
 
-        executor.execute(templatesPath, pathWithoutExtension, newFilename);
+        const resultExecution = await executor.execute(templatesPath, pathWithoutExtension, newFilename);
+        if (resultExecution.isErr()) {
+            switch (resultExecution.status()) {
+                case statuses.fileExistingError:
+                    vscode.window.showErrorMessage(resultExecution.info() as string);
+                    break;
+                default:
+                    log(resultExecution.info() as string);
+                    break;
+            }
+
+            return;
+        }
+
+        const files = resultExecution.value();
+        await Promise.all(files.map(async createdFile => {
+            let cursorPosition = undefined;
+            if (createdFile.cursorPositionArray) {
+                cursorPosition = new vscode.Position(createdFile.cursorPositionArray[0], createdFile.cursorPositionArray[1]);
+            }
+
+            await this._openFile(createdFile.filePath, cursorPosition);
+        }));
+    }
+
+    private async _openFile(filePath: string, cursorPosition: vscode.Position | undefined): Promise<void> {
+        try {
+            const openedDoc = await vscode.workspace.openTextDocument(filePath);
+            const editor = await vscode.window.showTextDocument(openedDoc, { preview: false });
+
+            if (cursorPosition) {
+                const newSelection = new vscode.Selection(cursorPosition, cursorPosition);
+
+                editor.selection = newSelection;
+            }
+        } catch (errOpeningFile) {
+            log(`Error trying to open '${filePath}'`, errOpeningFile);
+        }
     }
 
     private static TemplatesPath = 'templates';
@@ -136,7 +175,7 @@ export class Extension {
         this.KnownCommands.set('Struct', new CommandExecutor('createStruct', [TemplateType.Struct]));
         this.KnownCommands.set('Controller', new CommandExecutor('createController', [TemplateType.Controller]));
         this.KnownCommands.set('ApiController', new CommandExecutor('createApiController', [TemplateType.ApiController]));
-        this.KnownCommands.set('Razor_Page', new CommandExecutor('createRazorPage', [ TemplateType.RazorPageClass, TemplateType.RazorPageTemplate]));
+        this.KnownCommands.set('Razor_Page', new CommandExecutor('createRazorPage', [TemplateType.RazorPageClass, TemplateType.RazorPageTemplate]));
         this.KnownCommands.set('XUnit', new CommandExecutor('createXUnitTest', [TemplateType.XUnit]));
         this.KnownCommands.set('NUnit', new CommandExecutor('createNUnitTest', [TemplateType.NUnit]));
         this.KnownCommands.set('MSTest', new CommandExecutor('createMSTest', [TemplateType.MsTest]));

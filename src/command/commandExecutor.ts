@@ -8,6 +8,13 @@ import FileHandler from '../io/fileHandler';
 import NamespaceDetector from '../namespaceDetector';
 import fileScopedNamespaceConverter from '../fileScopedNamespaceConverter';
 import TemplateConfiguration from '../template/templateConfiguration';
+import Result from '../common/result';
+import statuses from './commandExecutorStatus';
+
+export type CreatedFile = {
+    filePath: string,
+    cursorPositionArray: number [] | null,
+}
 
 export default class CommandExecutor {
     private _command: string;
@@ -22,7 +29,7 @@ export default class CommandExecutor {
         return `csharpextensions.${this._command}`;
     }
 
-    public async execute(templatesPath: string, pathWithoutExtension: string, newFilename: string): Promise<void> {
+    public async execute(templatesPath: string, pathWithoutExtension: string, newFilename: string): Promise<Result<Array<CreatedFile>>> {
         if (!this._templates || this._templates.length === 0) {
             throw new ExtensionError('Something went wrong during instantiation no templates provided');
         }
@@ -39,14 +46,24 @@ export default class CommandExecutor {
             .map(v => v.path);
 
         if (existingFiles.length) {
-            vscode.window.showErrorMessage(`File(s) already exists: ${EOL}${existingFiles.join(EOL)}`);
-
-            return;
+            return Result.error<Array<CreatedFile>>(statuses.fileExistingError, `File(s) already exists: ${EOL}${existingFiles.join(EOL)}`);
         }
 
-        this._templates.forEach(async templateType => {
+        let result = undefined;
+        const createdFiles = new Array<CreatedFile>();
+
+        await Promise.all(this._templates.map(async  templateType => {
             const templatePath = Template.getTemplatePath(templatesPath, templateType);
-            const templateContent = await FileHandler.read(templatePath);
+            let templateContent: string;
+            try {
+                templateContent = await FileHandler.read(templatePath);
+            } catch (e) {
+                const error = e as ExtensionError;
+                result = Result.error<void>(statuses.readingTemplateError, error.toString());
+
+                return false;
+            }
+
             const templateConf = TemplateConfiguration.create(templateType, vscode.workspace.getConfiguration());
             const template = new Template(templateType, templateContent, fileScopedNamespaceConverter, templateConf);
             const namespaceDetector = new NamespaceDetector(pathWithoutExtension);
@@ -59,32 +76,23 @@ export default class CommandExecutor {
             }
 
             const fileContent = template.build(newFilename, namespace, useFileScopedNamespace);
+            try {
+                await FileHandler.write(destinationFilePath, fileContent);
+            } catch (e) {
+                const error = e as ExtensionError;
+                result = Result.error<void>(statuses.writingFileError, error.toString());
 
-            await FileHandler.write(destinationFilePath, fileContent);
+                return false;
+            }
 
             const cursorPositionArray = template.findCursorInTemplate(newFilename, namespace, useFileScopedNamespace);
+            createdFiles.push({filePath: destinationFilePath, cursorPositionArray: cursorPositionArray });
+        }));
 
-            let cursorPosition = undefined;
-            if (cursorPositionArray) {
-                cursorPosition = new vscode.Position(cursorPositionArray[0], cursorPositionArray[1]);
-            }
-
-            this._openFile(destinationFilePath, cursorPosition);
-        });
-    }
-
-    private async _openFile(filePath: string, cursorPosition: vscode.Position | undefined): Promise<void> {
-        try {
-            const openedDoc = await vscode.workspace.openTextDocument(filePath);
-            const editor = await vscode.window.showTextDocument(openedDoc);
-
-            if (cursorPosition) {
-                const newSelection = new vscode.Selection(cursorPosition, cursorPosition);
-
-                editor.selection = newSelection;
-            }
-        } catch (errOpeningFile) {
-            throw new ExtensionError(`Error trying to open from '${filePath}'`, errOpeningFile);
+        if (result) {
+            return result;
         }
+
+        return Result.ok<Array<CreatedFile>>(createdFiles);
     }
 }

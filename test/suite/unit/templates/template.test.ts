@@ -1,14 +1,14 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 // import * as sinon from 'sinon';
-
-import { FileScopedNamespaceConverter } from '../../../src/fileScopedNamespaceConverter';
-import Template from '../../../src/template/template';
-import { TemplateType } from '../../../src/template/templateType';
 import { EOL } from 'os';
 import { sortBy, uniq } from 'lodash';
 import { sep } from 'path';
-import TemplateConfiguration from '../../../src/template/templateConfiguration';
+
+import { FileScopedNamespaceConverter } from '../../../../src/fileScopedNamespaceConverter';
+import Template from '../../../../src/template/template';
+import { TemplateType } from '../../../../src/template/templateType';
+import TemplateConfiguration from '../../../../src/template/templateConfiguration';
 
 
 suite('Template', () => {
