@@ -1,9 +1,8 @@
 import * as assert from 'assert';
-import * as vscode from 'vscode';
-// import { EOL } from 'os';
 
 import TemplateConfiguration from '../../../../src/template/templateConfiguration';
 import { TemplateType } from '../../../../src/template/templateType';
+import { EOL } from 'os';
 
 suite('TemplateConfiguration', () => {
     const allTypes: Array<TemplateType> = [
@@ -27,46 +26,34 @@ suite('TemplateConfiguration', () => {
         TemplateType.UWPWindowXml,
     ];
     allTypes.forEach((type) => {
-        test(`create for type ${TemplateType[type]} with include namaspaces true and default eol`, async () => {
-            const workspace = vscode.workspace.getConfiguration();
+        test(`create for type ${TemplateType[type]} with include namaspaces true and default eol`, () => {
+            const configuration = TemplateConfiguration.create(type, EOL, true);
 
-            return workspace.update('csharpextensions.includeNamespaces', true, vscode.ConfigurationTarget.Global)
-                .then(() => {
-                    const configuration = TemplateConfiguration.create(type, workspace);
-
-                    // assert.strictEqual(configuration.getIncludeNamespaces(), true);
-                    assert.deepStrictEqual(configuration.getRequiredUsings(), getRequiredImports(type));
-                    assert.deepStrictEqual(configuration.getOptionalUsings(), getOptionalImports(type));
-                });
+            assert.strictEqual(configuration.getIncludeNamespaces(), true);
+            assert.strictEqual(configuration.getEolSettings(), EOL);
+            assert.deepStrictEqual(configuration.getRequiredUsings(), getRequiredImports(type));
+            assert.deepStrictEqual(configuration.getOptionalUsings(), getOptionalImports(type));
         });
     });
     allTypes.forEach((type) => {
-        test(`create for type ${TemplateType[type]} with include namaspaces false and default eol`, async () => {
-            const workspace = vscode.workspace.getConfiguration();
+        test(`create for type ${TemplateType[type]} with include namaspaces false and default eol`, () => {
+            const configuration = TemplateConfiguration.create(type, EOL, false);
 
-            return workspace.update('csharpextensions.includeNamespaces', false, vscode.ConfigurationTarget.Global)
-                .then(() => {
-                    const configuration = TemplateConfiguration.create(type, workspace);
-
-                    // assert.strictEqual(configuration.getIncludeNamespaces(), false);
-                    assert.deepStrictEqual(configuration.getRequiredUsings(), getRequiredImports(type));
-                    assert.deepStrictEqual(configuration.getOptionalUsings(), getOptionalImports(type));
-                });
+            assert.strictEqual(configuration.getIncludeNamespaces(), false);
+            assert.strictEqual(configuration.getEolSettings(), EOL);
+            assert.deepStrictEqual(configuration.getRequiredUsings(), getRequiredImports(type));
+            assert.deepStrictEqual(configuration.getOptionalUsings(), getOptionalImports(type));
         });
     });
     ['\n', '\r\n', 'someString'].forEach((eolSetting) => {
         test(`create  with eol ${eolSetting}`, async () => {
-            const workspace = vscode.workspace.getConfiguration();
+            const configuration = TemplateConfiguration.create(TemplateType.Class, eolSetting, true);
 
-            return workspace.update('files.eol', eolSetting, vscode.ConfigurationTarget.Global)
-                .then(() => {
-                    const configuration = TemplateConfiguration.create(TemplateType.Class, workspace);
+            assert.strictEqual(configuration.getEolSettings(), eolSetting === 'someString' ? EOL : eolSetting);
+            assert.strictEqual(configuration.getIncludeNamespaces(), true);
+            assert.deepStrictEqual(configuration.getRequiredUsings(), getRequiredImports(TemplateType.Class));
+            assert.deepStrictEqual(configuration.getOptionalUsings(), getOptionalImports(TemplateType.Class));
 
-                    // assert.strictEqual(configuration.getEolSettings(), eolSetting === 'someString' ? EOL : eolSetting);
-                    // assert.strictEqual(configuration.getIncludeNamespaces(), true);
-                    assert.deepStrictEqual(configuration.getRequiredUsings(), getRequiredImports(TemplateType.Class));
-                    assert.deepStrictEqual(configuration.getOptionalUsings(), getOptionalImports(TemplateType.Class));
-                });
         });
 
     });

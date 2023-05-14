@@ -5,19 +5,21 @@ import { EOL } from 'os';
 
 import CodeActionProvider from './codeActionProvider';
 import { log } from './util';
-import { TemplateType } from './template/templateType';
-import CommandExecutor from './command/commandExecutor';
-import statuses from './command/commandExecutorStatus';
+import CSharpFileCreator from './creator/cShaprFileCreator';
 import Maybe from './common/maybe';
+import { CommandMapping, createExtensionMappings } from './commandMapping';
+import TemplateConfiguration from './template/templateConfiguration';
+
+const EXTENSION_NAME = 'csharpextensions';
 
 export function activate(context: vscode.ExtensionContext): void {
     const extension = Extension.GetInstance();
 
-    Extension.GetKnonwCommands().forEach((commandExecutor, key) => {
+    Extension.GetKnonwCommands().forEach((mapping, key) => {
         context.subscriptions.push(
             vscode.commands.registerCommand(
-                commandExecutor.getCommand(),
-                async (options: RegisterCommandCallbackArgument) => await extension.startExecutor(options, key, commandExecutor)
+                `${EXTENSION_NAME}.${mapping.command}`,
+                async (options: RegisterCommandCallbackArgument) => await extension.startExecutor(options, key, mapping)
             )
         );
     });
@@ -53,7 +55,7 @@ export class Extension {
         return Maybe.none<string>();
     }
 
-    public async startExecutor(options: RegisterCommandCallbackArgument, hintName: string, executor: CommandExecutor): Promise<void> {
+    public async startExecutor(options: RegisterCommandCallbackArgument, hintName: string, mapping: CommandMapping): Promise<void> {
         const maybeIncomingPath = this._getIncomingPath(options);
 
         if (maybeIncomingPath.isNone()) {
@@ -70,17 +72,17 @@ export class Extension {
             return;
         }
 
+        // the output will be always of type string
         let newFilename = await vscode.window.showInputBox({
             ignoreFocusOut: true,
             prompt: 'Please enter a name for the new file(s)',
-            value: `New${hintName}`
-        });
-
-        if (typeof newFilename === 'undefined' || newFilename.trim() === '') {
-            log('Filename request: User did not provide any input');
-
-            return;
-        }
+            value: `New${hintName}`,
+            validateInput(inputValue: string): string | undefined {
+                if (typeof inputValue === 'undefined' || inputValue.trim() === '') {
+                    return 'Filename request: User did not provide any input';
+                }
+            },
+        }) as string;
 
         if (newFilename.endsWith('.cs')) newFilename = newFilename.substring(0, newFilename.length - 3);
 
@@ -88,21 +90,33 @@ export class Extension {
         const templatesPath = path.join(extension.extensionPath, Extension.TemplatesPath);
         const pathWithoutExtension = `${incomingPath}${path.sep}${newFilename}`;
 
-        const resultExecution = await executor.execute(templatesPath, pathWithoutExtension, newFilename);
-        if (resultExecution.isErr()) {
-            switch (resultExecution.status()) {
-                case statuses.fileExistingError:
-                    vscode.window.showErrorMessage(resultExecution.info() as string);
-                    break;
-                default:
-                    log(resultExecution.info() as string);
-                    break;
-            }
+        const { templates } = mapping;
+        const configuration = vscode.workspace.getConfiguration();
+        const eol = configuration.get('file.eol', EOL);
+        const includeNamespaces = configuration.get(`${EXTENSION_NAME}.includeNamespaces`, true);
+
+        const createdFilesResult = await Promise.all(templates.map(async template => {
+            return CSharpFileCreator.create(TemplateConfiguration.create(template, eol, includeNamespaces))
+                .AndThen(async creator => await creator.create(templatesPath, pathWithoutExtension, newFilename));
+        }));
+
+        if (createdFilesResult.some(result => result.isErr())) {
+            const error = createdFilesResult.filter(result => result.isErr())
+                .map(result => result.info()).filter(info => !!info)
+                .join(EOL);
+
+            log(error);
+            vscode.window.showErrorMessage(error);
 
             return;
         }
 
-        const files = resultExecution.value();
+        const files = createdFilesResult.map(result => result.value()).sort((cf1, cf2) => {
+            const weight1 = cf1.filePath.endsWith('.cs') ? 0 : 1;
+            const weight2 = cf2.filePath.endsWith('.cs') ? 0 : 1;
+
+            return weight2 - weight1;
+        });
         await Promise.all(files.map(async createdFile => {
             let cursorPosition = undefined;
             if (createdFile.cursorPositionArray) {
@@ -129,7 +143,7 @@ export class Extension {
     }
 
     private static TemplatesPath = 'templates';
-    private static KnownCommands: Map<string, CommandExecutor>;
+    private static KnownCommands: Map<string, CommandMapping>;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private static CurrentVscodeExtension: vscode.Extension<any> | undefined = undefined;
     private static Instance: Extension;
@@ -163,26 +177,12 @@ export class Extension {
         return this.CurrentVscodeExtension;
     }
 
-    static GetKnonwCommands(): Map<string, CommandExecutor> {
+    static GetKnonwCommands(): Map<string, CommandMapping> {
         if (this.KnownCommands) {
             return this.KnownCommands;
         }
 
-        this.KnownCommands = new Map();
-        this.KnownCommands.set('Class', new CommandExecutor('createClass', [TemplateType.Class]));
-        this.KnownCommands.set('Interface', new CommandExecutor('createInterface', [TemplateType.Inteface]));
-        this.KnownCommands.set('Enum', new CommandExecutor('createEnum', [TemplateType.Enum]));
-        this.KnownCommands.set('Struct', new CommandExecutor('createStruct', [TemplateType.Struct]));
-        this.KnownCommands.set('Controller', new CommandExecutor('createController', [TemplateType.Controller]));
-        this.KnownCommands.set('ApiController', new CommandExecutor('createApiController', [TemplateType.ApiController]));
-        this.KnownCommands.set('Razor_Page', new CommandExecutor('createRazorPage', [TemplateType.RazorPageClass, TemplateType.RazorPageTemplate]));
-        this.KnownCommands.set('XUnit', new CommandExecutor('createXUnitTest', [TemplateType.XUnit]));
-        this.KnownCommands.set('NUnit', new CommandExecutor('createNUnitTest', [TemplateType.NUnit]));
-        this.KnownCommands.set('MSTest', new CommandExecutor('createMSTest', [TemplateType.MsTest]));
-        this.KnownCommands.set('UWP_Page', new CommandExecutor('createUwpPage', [TemplateType.UWPPageClass, TemplateType.UWPPageXml]));
-        this.KnownCommands.set('UWP_Window', new CommandExecutor('createUwpWindow', [TemplateType.UWPWindowClass, TemplateType.UWPWindowXml]));
-        this.KnownCommands.set('UWP_Usercontrol', new CommandExecutor('createUwpUserControl', [TemplateType.UWPUserControllClass, TemplateType.UWPUserControllXml]));
-        this.KnownCommands.set('UWP_Resource', new CommandExecutor('createUwpResourceFile', [TemplateType.UWPResource]));
+        this.KnownCommands = createExtensionMappings();
 
         return this.KnownCommands;
     }

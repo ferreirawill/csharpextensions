@@ -1,6 +1,4 @@
 import * as assert from 'assert';
-import * as vscode from 'vscode';
-// import * as sinon from 'sinon';
 import { EOL } from 'os';
 import { sortBy, uniq } from 'lodash';
 import { sep } from 'path';
@@ -34,7 +32,6 @@ suite('Template', () => {
         TemplateType.UWPWindowXml,
     ];
     const fileScopedNamespaceConverter = new FileScopedNamespaceConverter();
-    const workspaceConfiguration = vscode.workspace.getConfiguration();
 
     allTypes.forEach((type) => {
 
@@ -149,7 +146,7 @@ suite('Template', () => {
             assert.strictEqual(path, `${testPath}${sep}${expectedTemplateFileName}`);
         });
         test(`Ctor works for type ${TemplateType[type]}`, () => {
-            const templateConfiguration = TemplateConfiguration.create(type, workspaceConfiguration);
+            const templateConfiguration = TemplateConfiguration.create(type, EOL, true);
             const template = new Template(type, '', fileScopedNamespaceConverter, templateConfiguration);
             assert.strictEqual(template.getName(), Template.RetriveName(type));
             assert.strictEqual(template.getContent(), '');
@@ -174,25 +171,25 @@ suite('Template', () => {
     ];
     csharpTypes.forEach((type) => {
         test(`${TemplateType[type]} build when no content and using namespace false and file scoped namespace false`, () => {
-            const configuration = new TemplateConfiguration(false, EOL, new Array<string>(), new Array<string>());
+            const configuration = TemplateConfiguration.create(type, EOL,false);
             const template = new Template(type, '', fileScopedNamespaceConverter, configuration);
             const result = template.build('test', globalNameSpace, false);
             assert.strictEqual(result, '');
         });
         test(`${TemplateType[type]} build when no content and using namespace true and file scoped namespace false`, () => {
-            const configuration = new TemplateConfiguration(true, EOL, new Array<string>(), new Array<string>());
+            const configuration = TemplateConfiguration.create(type, EOL, true);
             const template = new Template(type, '', fileScopedNamespaceConverter, configuration);
             const result = template.build('test', globalNameSpace, false);
             assert.strictEqual(result, '');
         });
         test(`${TemplateType[type]} build when no content and using namespace false and file scoped namespace true`, () => {
-            const configuration = new TemplateConfiguration(false, EOL, new Array<string>(), new Array<string>());
+            const configuration = TemplateConfiguration.create(type, EOL, false);
             const template = new Template(type, '', fileScopedNamespaceConverter, configuration);
             const result = template.build('test', globalNameSpace, true);
             assert.strictEqual(result, '');
         });
         test(`${TemplateType[type]} build when namespace gets replaced in non file scope mode`, () => {
-            const configuration = new TemplateConfiguration(false, EOL, new Array<string>(), new Array<string>());
+            const configuration = TemplateConfiguration.create(type, EOL, false);
             const content = `${EOL}\${namespace}${EOL}{${EOL}}${EOL}`;
             const template = new Template(type, content, fileScopedNamespaceConverter, configuration);
             const result = template.build('test', globalNameSpace, false);
@@ -202,7 +199,7 @@ suite('Template', () => {
         });
         test(`${TemplateType[type]} build when namespace gets replaced in non file scope mode but no curly braces`, () => {
             const content = `${EOL}\${namespace}${EOL}`;
-            const configuration = new TemplateConfiguration(false, EOL, new Array<string>(), new Array<string>());
+            const configuration = TemplateConfiguration.create(type, EOL, false);
             const template = new Template(type, content, fileScopedNamespaceConverter, configuration);
             const result = template.build('test', globalNameSpace, false);
             const expectedResult = `${EOL}${globalNameSpace}${EOL}`;
@@ -211,40 +208,40 @@ suite('Template', () => {
         });
         test(`${TemplateType[type]} build when namespace gets replaced in file scope mode`, () => {
             const content = `\${namespace}${EOL}{${EOL}}${EOL}`;
-            const configuration = new TemplateConfiguration(false, EOL, new Array<string>(), new Array<string>());
+            const configuration = TemplateConfiguration.create(type, EOL, false);
             const template = new Template(type, content, fileScopedNamespaceConverter, configuration);
             const result = template.build('test', globalNameSpace, true);
             assert.strictEqual(result, `${globalNameSpace};${EOL}${EOL}${EOL}`);
         });
         test(`${TemplateType[type]} build when EOL gets replaced with \\r\\n`, () => {
             const content = `${EOL}${EOL}${EOL}`;
-            const configuration = new TemplateConfiguration(false, '\r\n', new Array<string>(), new Array<string>());
+            const configuration = TemplateConfiguration.create(type, '\r\n', false);
             const template = new Template(type, content, fileScopedNamespaceConverter, configuration);
             const result = template.build('test', globalNameSpace, true, );
             assert.strictEqual(result, '\r\n\r\n\r\n');
         });
         test(`${TemplateType[type]} build when EOL gets replaced with \\n`, () => {
             const content = `${EOL}${EOL}${EOL}`;
-            const configuration = new TemplateConfiguration(false, '\n', new Array<string>(), new Array<string>());
+            const configuration = TemplateConfiguration.create(type,'\n', false);
             const template = new Template(type, content, fileScopedNamespaceConverter, configuration);
             const result = template.build('test', globalNameSpace, true);
             assert.strictEqual(result, '\n\n\n');
         });
         test(`${TemplateType[type]} build when class name gets replaced`, () => {
-            const configuration = new TemplateConfiguration(true, EOL, new Array<string>(), new Array<string>());
+            const configuration = TemplateConfiguration.create(type, EOL, true);
             const template = new Template(type, '${classname}', fileScopedNamespaceConverter, configuration);
             const result = template.build('test', globalNameSpace, true);
             assert.strictEqual(result, 'test');
         });
         test(`${TemplateType[type]} build when no content and using namespace true and file scoped namespace true`, () => {
-            const configuration = new TemplateConfiguration(true, EOL, new Array<string>(), new Array<string>());
+            const configuration = TemplateConfiguration.create(type, EOL, true);
             const template = new Template(type, '', fileScopedNamespaceConverter, configuration);
             const result = template.build('test', globalNameSpace, true);
             assert.strictEqual(result, '');
         });
         test(`${TemplateType[type]} build when namespaces get replaced by required imports`, () => {
             const content = '${namespaces}';
-            const configuration = new TemplateConfiguration(false, EOL, getRequiredImports(type), new Array<string>());
+            const configuration = TemplateConfiguration.create(type, EOL, false);
             const template = new Template(type, content, fileScopedNamespaceConverter, configuration);
             const result = template.build('test', globalNameSpace, false);
             const expectedResult = configuration.getRequiredUsings();
@@ -253,7 +250,7 @@ suite('Template', () => {
         });
         test(`${TemplateType[type]} build when namespaces get replaced by required and optional imports`, () => {
             const content = '${namespaces}';
-            const configuration = new TemplateConfiguration(true, EOL, getRequiredImports(type), getOptionalImports(type));
+            const configuration = TemplateConfiguration.create(type, EOL, true);
             const template = new Template(type, content, fileScopedNamespaceConverter, configuration);
             const result = template.build('test', globalNameSpace, false);
             const expectedRequired = configuration.getRequiredUsings();
@@ -262,28 +259,28 @@ suite('Template', () => {
             assert.strictEqual(result, mergeImports(expectedOptional, expectedRequired));
         });
         test(`${TemplateType[type]} FindCursorInTemplate when no content and using namespace false and file scoped namespace false`, () => {
-            const configuration = new TemplateConfiguration(false, EOL, new Array<string>(), new Array<string>());
+            const configuration = TemplateConfiguration.create(type, EOL, false);
             const template = new Template(type, '', fileScopedNamespaceConverter, configuration);
             const result = template.findCursorInTemplate('test', globalNameSpace, false);
 
             assert.strictEqual(result, null);
         });
         test(`${TemplateType[type]} FindCursorInTemplate when no content and using namespace true and file scoped namespace false`, () => {
-            const configuration = new TemplateConfiguration(true, EOL, new Array<string>(), new Array<string>());
+            const configuration = TemplateConfiguration.create(type, EOL, true);
             const template = new Template(type, '', fileScopedNamespaceConverter, configuration);
             const result = template.findCursorInTemplate('test', globalNameSpace, false);
 
             assert.strictEqual(result, null);
         });
         test(`${TemplateType[type]} FindCursorInTemplate when no content and using namespace false and file scoped namespace true`, () => {
-            const configuration = new TemplateConfiguration(false, EOL, new Array<string>(), new Array<string>());
+            const configuration = TemplateConfiguration.create(type, EOL, false);
             const template = new Template(type, '', fileScopedNamespaceConverter, configuration);
             const result = template.findCursorInTemplate('test', globalNameSpace, true);
 
             assert.strictEqual(result, null);
         });
         test(`${TemplateType[type]} FindCursorInTemplate when no content and using namespace true and file scoped namespace true`, () => {
-            const configuration = new TemplateConfiguration(true, EOL, new Array<string>(), new Array<string>());
+            const configuration = TemplateConfiguration.create(type, EOL, true);
             const template = new Template(type, '', fileScopedNamespaceConverter, configuration);
             const result = template.findCursorInTemplate('test', globalNameSpace, true);
 
@@ -291,7 +288,7 @@ suite('Template', () => {
         });
         test(`${TemplateType[type]} FindCursorInTemplate when cursor defined by one line`, () => {
             const content = '${cursor}';
-            const configuration = new TemplateConfiguration(true, EOL, new Array<string>(), new Array<string>());
+            const configuration = TemplateConfiguration.create(type, EOL, true);
             const template = new Template(type, content, fileScopedNamespaceConverter, configuration);
             const result = template.findCursorInTemplate('test', globalNameSpace, false);
 
@@ -300,7 +297,7 @@ suite('Template', () => {
         test(`${TemplateType[type]} FindCursorInTemplate when cursor on second line`, () => {
             const content = `
 \${cursor}`;
-            const configuration = new TemplateConfiguration(true, EOL, new Array<string>(), new Array<string>());
+            const configuration = TemplateConfiguration.create(type, EOL, true);
             const template = new Template(type, content, fileScopedNamespaceConverter, configuration);
             const result = template.findCursorInTemplate('test', globalNameSpace, false);
 
@@ -308,110 +305,6 @@ suite('Template', () => {
         });
     });
 });
-
-function getRequiredImports(type: TemplateType): Array<string> {
-    let expectedRequired: Array<string>;
-    switch (type) {
-        case TemplateType.Class:
-        case TemplateType.Inteface:
-        case TemplateType.Enum:
-        case TemplateType.Struct:
-        case TemplateType.UWPPageClass:
-        case TemplateType.UWPUserControllClass:
-        case TemplateType.UWPWindowClass:
-            expectedRequired = [];
-            break;
-        case TemplateType.Controller:
-            expectedRequired = [
-                'System.Diagnostics',
-                'Microsoft.AspNetCore.Mvc',
-                'Microsoft.Extensions.Logging',
-            ];
-            break;
-        case TemplateType.ApiController:
-            expectedRequired = ['Microsoft.AspNetCore.Mvc'];
-            break;
-        case TemplateType.MsTest:
-            expectedRequired = ['Microsoft.VisualStudio.TestTools.UnitTesting'];
-            break;
-        case TemplateType.NUnit:
-            expectedRequired = ['NUnit.Framework'];
-            break;
-        case TemplateType.XUnit:
-            expectedRequired = ['Xunit'];
-            break;
-        case TemplateType.RazorPageClass:
-            expectedRequired = [
-                'Microsoft.AspNetCore.Mvc',
-                'Microsoft.AspNetCore.Mvc.RazorPages',
-                'Microsoft.Extensions.Logging',
-            ];
-            break;
-        case TemplateType.UWPUserControllXml:
-        case TemplateType.UWPWindowXml:
-        case TemplateType.UWPPageXml:
-        case TemplateType.RazorPageTemplate:
-        case TemplateType.UWPResource:
-            return [];
-        default:
-            throw new Error(`Not expected type: ${TemplateType[type]}`);
-    }
-
-    return expectedRequired;
-}
-
-function getOptionalImports(type: TemplateType): Array<string> {
-    let optionalImports: Array<string>;
-    switch (type) {
-        case TemplateType.Class:
-        case TemplateType.Inteface:
-        case TemplateType.Enum:
-        case TemplateType.Struct:
-        case TemplateType.Controller:
-        case TemplateType.ApiController:
-        case TemplateType.MsTest:
-        case TemplateType.NUnit:
-        case TemplateType.XUnit:
-        case TemplateType.RazorPageClass:
-            optionalImports = [
-                'System',
-                'System.Collections.Generic',
-                'System.Linq',
-                'System.Threading.Tasks',
-            ];
-            break;
-        case TemplateType.UWPPageClass:
-        case TemplateType.UWPUserControllClass:
-        case TemplateType.UWPWindowClass:
-            optionalImports = [
-                'System',
-                'System.Collections.Generic',
-                'System.Linq',
-                'System.Text',
-                'System.Threading.Tasks',
-                'System.Windows',
-                'System.Windows.Controls',
-                'System.Windows.Data',
-                'System.Windows.Documents',
-                'System.Windows.Input',
-                'System.Windows.Media',
-                'System.Windows.Media.Imaging',
-                'System.Windows.Navigation',
-                'System.Windows.Shapes',
-            ];
-            break;
-        case TemplateType.UWPUserControllXml:
-        case TemplateType.UWPWindowXml:
-        case TemplateType.UWPPageXml:
-        case TemplateType.RazorPageTemplate:
-        case TemplateType.UWPResource:
-            return [];
-        default:
-            throw new Error(`Not expected type: ${TemplateType[type]}`);
-    }
-
-    return optionalImports;
-}
 
 function mergeImports(arg1: Array<string>, arg2 = new Array<string>()): string {
     let usings = arg1;

@@ -1,5 +1,8 @@
 import Status from './status';
 
+type Func<T, T2> = (value: T) => Result<T2>;
+type FuncAsync<T, T2> = (value: T) => Promise<Result<T2>>;
+
 export default class Result<T> {
     private _value: T | undefined;
     private _status: Status;
@@ -31,6 +34,23 @@ export default class Result<T> {
     public isErr(): boolean { return !this._status.isSuccessful(); }
     public info(): string | undefined { return this._info; }
     public status(): string { return this._status.innerStatus(); }
+
+    public AndThenSync<T2>(fun: Func<T, T2>): Result<T2> {
+
+        if (this.isOk()) {
+            return fun(this.value());
+        }
+
+        return Result.error<T2>(this.status(), this.info());
+    }
+
+    public AndThen<T2>(fun: FuncAsync<T, T2>): Promise<Result<T2>> {
+        if (this.isOk()) {
+            return fun(this.value());
+        }
+
+        return Promise.resolve(Result.error<T2>(this.status(), this.info()));
+    }
 
     public static ok<T>(value: T): Result<T> { return new Result(value, Status.success(), undefined); }
     public static error<T>(innerStatus ='error', info: string | undefined): Result<T> { return new Result<T>(undefined, Status.error(innerStatus), info); }

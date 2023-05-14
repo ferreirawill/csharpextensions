@@ -1,44 +1,43 @@
 import { EOL } from 'os';
-import { WorkspaceConfiguration } from 'vscode';
 
 import { ExtensionError } from '../util';
 import { TemplateType } from './templateType';
 
 export default class TemplateConfiguration {
+    private _templateType: TemplateType;
     private _includeNamespaces: boolean;
     private _eolSettings: string;
     private _requiredUsings: Array<string>;
     private _optionalUsings: Array<string>;
 
-    constructor(includeNamespaces: boolean, eolSettings: string, requiredUsings: Array<string>, optionalUsings: Array<string>) {
+    private constructor(templateType: TemplateType, includeNamespaces: boolean, eolSettings: string, requiredUsings: Array<string>, optionalUsings: Array<string>) {
+        this._templateType = templateType;
         this._includeNamespaces = includeNamespaces;
         this._eolSettings = eolSettings;
         this._requiredUsings = requiredUsings;
         this._optionalUsings = optionalUsings;
     }
 
+    public getTemplateType(): TemplateType { return this._templateType; }
     public getIncludeNamespaces(): boolean { return this._includeNamespaces; }
     public getEolSettings(): string { return this._eolSettings; }
     public getRequiredUsings(): Array<string> { return this._requiredUsings; }
     public getOptionalUsings(): Array<string> { return this._optionalUsings; }
 
-    public static create(type: TemplateType, workspaceConfiguration: WorkspaceConfiguration): TemplateConfiguration {
-        const eolSettings = TemplateConfiguration.getEolSetting(workspaceConfiguration);
-        const includeNamespaces = workspaceConfiguration.get('csharpextensions.includeNamespaces', true);
+    public static create(type: TemplateType, eol: string, includeNamespaces: boolean): TemplateConfiguration {
+        const eolSettings = TemplateConfiguration.getEolSetting(eol);
 
         const requiredUsings = TemplateConfiguration.retrieveRequiredUsings(type);
         const optionalUsings = TemplateConfiguration.retrieveOptionalUsings(type);
 
-        return new TemplateConfiguration(includeNamespaces, eolSettings, requiredUsings, optionalUsings);
+        return new TemplateConfiguration(type, includeNamespaces, eolSettings, requiredUsings, optionalUsings);
     }
 
-    private static getEolSetting(workspaceConfiguration: WorkspaceConfiguration): string {
-        const eolSetting = workspaceConfiguration.get('files.eol', EOL);
-
-        switch (eolSetting) {
+    private static getEolSetting(eol: string): string {
+        switch (eol) {
             case '\n':
             case '\r\n':
-                return eolSetting;
+                return eol;
             case 'auto':
             default:
                 return EOL;
