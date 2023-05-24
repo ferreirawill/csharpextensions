@@ -109,6 +109,33 @@
             }
         ],
         "menus": {
+            "file/newFile": [
+                {
+                    "command": "csharpextensions.createClass",
+                    "group": "file",
+                    "when": "!virtualWorkspace"
+                },
+                {
+                    "command": "csharpextensions.createInterface",
+                    "group": "file",
+                    "when": "!virtualWorkspace"
+                },
+                {
+                    "command": "csharpextensions.createEnum",
+                    "group": "file",
+                    "when": "!virtualWorkspace"
+                },
+                {
+                    "command": "csharpextensions.createStruct",
+                    "group": "file",
+                    "when": "!virtualWorkspace"
+                },
+                {
+                    "command": "csharpextensions.createRecord",
+                    "group": "file",
+                    "when": "!virtualWorkspace"
+                }
+            ],
             "csharpextensions.new": [
                 {
                     "group": "00_basics@0",
