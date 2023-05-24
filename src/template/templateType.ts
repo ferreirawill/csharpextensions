@@ -3,6 +3,7 @@ export enum TemplateType {
     Inteface,
     Enum,
     Struct,
+    Record,
     Controller,
     ApiController,
     MsTest,

@@ -3,6 +3,7 @@ import * as assert from 'assert';
 import TemplateConfiguration from '../../../../src/template/templateConfiguration';
 import { TemplateType } from '../../../../src/template/templateType';
 import { EOL } from 'os';
+import Template from '../../../../src/template/template';
 
 suite('TemplateConfiguration', () => {
     const allTypes: Array<TemplateType> = [
@@ -26,36 +27,87 @@ suite('TemplateConfiguration', () => {
         TemplateType.UWPWindowXml,
     ];
     allTypes.forEach((type) => {
-        test(`create for type ${TemplateType[type]} with include namaspaces true and default eol`, () => {
-            const configuration = TemplateConfiguration.create(type, EOL, true);
+        test(`create for type ${TemplateType[type]} with include namaspaces true, default eol and File scoped namespace for cs template true`, () => {
+            const configurationResult = TemplateConfiguration.create(type, EOL, true, true, true);
 
+            assert.strictEqual(configurationResult.isOk(), true);
+            const configuration = configurationResult.value();
             assert.strictEqual(configuration.getIncludeNamespaces(), true);
             assert.strictEqual(configuration.getEolSettings(), EOL);
+            assert.strictEqual(configuration.getUseFileScopedNamespace(), Template.getExtension(type).endsWith('.cs') ? true : false);
             assert.deepStrictEqual(configuration.getRequiredUsings(), getRequiredImports(type));
             assert.deepStrictEqual(configuration.getOptionalUsings(), getOptionalImports(type));
         });
     });
     allTypes.forEach((type) => {
-        test(`create for type ${TemplateType[type]} with include namaspaces false and default eol`, () => {
-            const configuration = TemplateConfiguration.create(type, EOL, false);
+        test(`create for type ${TemplateType[type]} with include namaspaces true, default eol and File scoped namespace  false`, () => {
+            const configurationResult = TemplateConfiguration.create(type, EOL, true, false, true);
 
+            assert.strictEqual(configurationResult.isOk(), true);
+            const configuration = configurationResult.value();
+            assert.strictEqual(configuration.getIncludeNamespaces(), true);
+            assert.strictEqual(configuration.getEolSettings(), EOL);
+            assert.strictEqual(configuration.getUseFileScopedNamespace(), false);
+            assert.deepStrictEqual(configuration.getRequiredUsings(), getRequiredImports(type));
+            assert.deepStrictEqual(configuration.getOptionalUsings(), getOptionalImports(type));
+        });
+    });
+    allTypes.forEach((type) => {
+        test(`create for type ${TemplateType[type]} with include namaspaces true, default eol and File scoped namespace  false and older target framework`, () => {
+            const configurationResult = TemplateConfiguration.create(type, EOL, true, false, false);
+
+            if (type !== TemplateType.Record) {
+                assert.strictEqual(configurationResult.isOk(), true);
+                const configuration = configurationResult.value();
+                assert.strictEqual(configuration.getIncludeNamespaces(), true);
+                assert.strictEqual(configuration.getEolSettings(), EOL);
+                assert.strictEqual(configuration.getUseFileScopedNamespace(), false);
+                assert.deepStrictEqual(configuration.getRequiredUsings(), getRequiredImports(type));
+                assert.deepStrictEqual(configuration.getOptionalUsings(), getOptionalImports(type));
+            } else {
+                assert.strictEqual(configurationResult.isErr(), true);
+                assert.strictEqual(configurationResult.status(), 'error');
+                assert.strictEqual(configurationResult.info(), 'The target .NET framework does not support Record');
+            }
+        });
+    });
+    allTypes.forEach((type) => {
+        test(`create for type ${TemplateType[type]} with include namaspaces false and default eol and File scoped namespace for cs template true`, () => {
+            const configurationResult = TemplateConfiguration.create(type, EOL, false, true, true);
+
+            assert.strictEqual(configurationResult.isOk(), true);
+            const configuration = configurationResult.value();
             assert.strictEqual(configuration.getIncludeNamespaces(), false);
             assert.strictEqual(configuration.getEolSettings(), EOL);
+            assert.strictEqual(configuration.getUseFileScopedNamespace(), Template.getExtension(type).endsWith('.cs') ? true : false);
+            assert.deepStrictEqual(configuration.getRequiredUsings(), getRequiredImports(type));
+            assert.deepStrictEqual(configuration.getOptionalUsings(), getOptionalImports(type));
+        });
+    });
+    allTypes.forEach((type) => {
+        test(`create for type ${TemplateType[type]} with include namaspaces false and default eol and File scoped namespace for cs template false`, () => {
+            const configurationResult = TemplateConfiguration.create(type, EOL, false, true, false);
+
+            assert.strictEqual(configurationResult.isOk(), true);
+            const configuration = configurationResult.value();
+            assert.strictEqual(configuration.getIncludeNamespaces(), false);
+            assert.strictEqual(configuration.getEolSettings(), EOL);
+            assert.strictEqual(configuration.getUseFileScopedNamespace(), false);
             assert.deepStrictEqual(configuration.getRequiredUsings(), getRequiredImports(type));
             assert.deepStrictEqual(configuration.getOptionalUsings(), getOptionalImports(type));
         });
     });
     ['\n', '\r\n', 'someString'].forEach((eolSetting) => {
         test(`create  with eol ${eolSetting}`, async () => {
-            const configuration = TemplateConfiguration.create(TemplateType.Class, eolSetting, true);
+            const configurationResult = TemplateConfiguration.create(TemplateType.Class, eolSetting, true, true, true);
 
+            const configuration = configurationResult.value();
             assert.strictEqual(configuration.getEolSettings(), eolSetting === 'someString' ? EOL : eolSetting);
             assert.strictEqual(configuration.getIncludeNamespaces(), true);
+            assert.strictEqual(configuration.getUseFileScopedNamespace(), true);
             assert.deepStrictEqual(configuration.getRequiredUsings(), getRequiredImports(TemplateType.Class));
             assert.deepStrictEqual(configuration.getOptionalUsings(), getOptionalImports(TemplateType.Class));
-
         });
-
     });
 });
 
@@ -65,6 +117,7 @@ function getRequiredImports(type: TemplateType): Array<string> {
         case TemplateType.Class:
         case TemplateType.Inteface:
         case TemplateType.Enum:
+        case TemplateType.Record:
         case TemplateType.Struct:
         case TemplateType.UWPPageClass:
         case TemplateType.UWPUserControllClass:
@@ -118,6 +171,7 @@ function getOptionalImports(type: TemplateType): Array<string> {
         case TemplateType.Inteface:
         case TemplateType.Enum:
         case TemplateType.Struct:
+        case TemplateType.Record:
         case TemplateType.Controller:
         case TemplateType.ApiController:
         case TemplateType.MsTest:

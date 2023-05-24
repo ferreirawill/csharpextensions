@@ -16,6 +16,7 @@ export function createExtensionMappings(): Map<string, CommandMapping> {
     mapping.set('Interface', getCommandMapping('createInterface', [TemplateType.Inteface]));
     mapping.set('Enum', getCommandMapping('createEnum', [TemplateType.Enum]));
     mapping.set('Struct', getCommandMapping('createStruct', [TemplateType.Struct]));
+    mapping.set('Record', getCommandMapping('createRecord', [TemplateType.Record]));
     mapping.set('Controller', getCommandMapping('createController', [TemplateType.Controller]));
     mapping.set('ApiController', getCommandMapping('createApiController', [TemplateType.ApiController]));
     mapping.set('Razor_Page', getCommandMapping('createRazorPage', [TemplateType.RazorPageClass, TemplateType.RazorPageTemplate]));

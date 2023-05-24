@@ -2,25 +2,24 @@ import { sortBy, uniq } from 'lodash';
 import * as path from 'path';
 
 import { TemplateType } from './templateType';
-import { FileScopedNamespaceConverter } from '../fileScopedNamespaceConverter';
 import TemplateConfiguration from './templateConfiguration';
 
 export default class Template {
     private static readonly ClassnameRegex = new RegExp(/\${classname}/, 'g');
     private static readonly NamespaceRegex = new RegExp(/\${namespace}/, 'g');
     private static readonly EolRegex = new RegExp(/\r?\n/g);
+    private static readonly NamespaceRegexForScoped = new RegExp(/(?<=\${namespace})/);
+    private static readonly NamespaceBracesRegex = new RegExp(/(?<=^)({|}| {4})/, 'gm');
 
     private _name: string;
     private _type: TemplateType;
     private _content: string;
-    private _fileScopeConverter: FileScopedNamespaceConverter;
     private _configuration: TemplateConfiguration;
 
-    constructor(type: TemplateType, content: string, fileScopeConverter: FileScopedNamespaceConverter, configuration: TemplateConfiguration) {
+    constructor(type: TemplateType, content: string, configuration: TemplateConfiguration) {
         this._name = Template.RetriveName(type);
         this._type = type;
         this._content = content;
-        this._fileScopeConverter = fileScopeConverter;
         this._configuration = configuration;
     }
 
@@ -29,8 +28,8 @@ export default class Template {
     public getContent(): string { return this._content; }
     public getConfiguration(): TemplateConfiguration { return this._configuration; }
 
-    public findCursorInTemplate(filename: string, namespace: string, useFileScopedNamespace: boolean): number[] | null {
-        const content = this._partialBuild(filename, namespace, useFileScopedNamespace);
+    public findCursorInTemplate(filename: string, namespace: string): number[] | null {
+        const content = this._partialBuild(filename, namespace);
         const cursorPos = content.indexOf('${cursor}');
         const preCursor = content.substring(0, cursorPos);
         const matchesForPreCursor = preCursor.match(/\n/gi);
@@ -43,16 +42,16 @@ export default class Template {
         return [lineNum, charNum];
     }
 
-    public build(filename: string, namespace: string, useFileScopedNamespace: boolean): string {
-        return this._partialBuild(filename, namespace, useFileScopedNamespace)
+    public build(filename: string, namespace: string): string {
+        return this._partialBuild(filename, namespace)
             .replace('${cursor}', '')
             .replace(Template.EolRegex, this._configuration.getEolSettings());
     }
 
-    private _partialBuild(filename: string, namespace: string, useFileScopedNamespace: boolean) {
+    private _partialBuild(filename: string, namespace: string) {
         let content = this._content;
-        if (useFileScopedNamespace) {
-            content = this._fileScopeConverter.getFileScopedNamespaceFormOfTemplate(this._content);
+        if (this._configuration.getUseFileScopedNamespace()) {
+            content = this._getFileScopedNamespaceFormOfTemplate(this._content);
         }
 
         content = content
@@ -61,6 +60,36 @@ export default class Template {
             .replace('${namespaces}', this._handleUsings());
 
         return content;
+    }
+
+    /**
+     * Get the file-scoped namespace form of the template.
+     * 
+     * From:
+     * ```csharp
+     * namespace ${namespace}
+     * {
+     *    // Template content
+     *    // Template content
+     * }
+     * ```
+     * 
+     * To:
+     * ```csharp
+     * namespace ${namespace};
+     * 
+     * // Template content
+     * // Template content
+     * ```
+     * 
+     * @param template The content of the C# template file.
+     */
+    private _getFileScopedNamespaceFormOfTemplate(template: string): string {
+        const result = template
+            .replace(Template.NamespaceBracesRegex, '')
+            .replace(Template.NamespaceRegexForScoped, ';');
+
+        return result;
     }
 
     private _handleUsings(): string {
@@ -86,6 +115,7 @@ export default class Template {
             case TemplateType.Inteface:
             case TemplateType.Enum:
             case TemplateType.Struct:
+            case TemplateType.Record:
             case TemplateType.Controller:
             case TemplateType.ApiController:
             case TemplateType.MsTest:
@@ -120,6 +150,8 @@ export default class Template {
                 return 'enum';
             case TemplateType.Struct:
                 return 'struct';
+            case TemplateType.Record:
+                return 'record';
             case TemplateType.Controller:
                 return 'controller';
             case TemplateType.ApiController:

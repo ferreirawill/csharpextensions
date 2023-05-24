@@ -3,7 +3,6 @@ import { ExtensionError } from '../util';
 import Template from '../template/template';
 import FileHandler from '../io/fileHandler';
 import NamespaceDetector from '../namespaceDetector';
-import fileScopedNamespaceConverter from '../fileScopedNamespaceConverter';
 import TemplateConfiguration from '../template/templateConfiguration';
 import Result from '../common/result';
 import statuses from './fileCreatorStatus';
@@ -40,16 +39,11 @@ export default class CSharpFileCreator {
             return Result.error<CreatedFile>(statuses.readingTemplateError, error.toString());
         }
 
-        const template = new Template(this._template, templateContent, fileScopedNamespaceConverter, this._templateConfiguration);
+        const template = new Template(this._template, templateContent, this._templateConfiguration);
         const namespaceDetector = new NamespaceDetector(pathWithoutExtension);
         const namespace = await namespaceDetector.getNamespace();
 
-        let useFileScopedNamespace = false;
-        if (Template.getExtension(template.getType()).endsWith('.cs')) {
-            useFileScopedNamespace = await fileScopedNamespaceConverter.shouldUseFileScopedNamespace(destinationFilePath);
-        }
-
-        const fileContent = template.build(newFilename, namespace, useFileScopedNamespace);
+        const fileContent = template.build(newFilename, namespace);
         try {
             await FileHandler.write(destinationFilePath, fileContent);
         } catch (e) {
@@ -58,7 +52,7 @@ export default class CSharpFileCreator {
             return Result.error<CreatedFile>(statuses.writingFileError, error.toString());
         }
 
-        const cursorPositionArray = template.findCursorInTemplate(newFilename, namespace, useFileScopedNamespace);
+        const cursorPositionArray = template.findCursorInTemplate(newFilename, namespace);
 
         return Result.ok<CreatedFile>({ filePath: destinationFilePath, cursorPositionArray: cursorPositionArray });
     }

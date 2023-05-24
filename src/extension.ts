@@ -9,6 +9,7 @@ import CSharpFileCreator from './creator/cShaprFileCreator';
 import Maybe from './common/maybe';
 import { CommandMapping, createExtensionMappings } from './commandMapping';
 import TemplateConfiguration from './template/templateConfiguration';
+import CsprojReader from './project/csprojReader';
 
 const EXTENSION_NAME = 'csharpextensions';
 
@@ -94,10 +95,14 @@ export class Extension {
         const configuration = vscode.workspace.getConfiguration();
         const eol = configuration.get('file.eol', EOL);
         const includeNamespaces = configuration.get(`${EXTENSION_NAME}.includeNamespaces`, true);
+        const useFileScopedNamespace = configuration.get<boolean>('csharpextensions.useFileScopedNamespace', false);
+        const csprojReader = await CsprojReader.createFromPath(`${pathWithoutExtension}.cs`);
+        const isTargetFrameworkAboveEqualNet6 = !!csprojReader && await csprojReader.isTargetFrameworkHigherThanOrEqualToDotNet6() === true;
 
         const createdFilesResult = await Promise.all(templates.map(async template => {
-            return CSharpFileCreator.create(TemplateConfiguration.create(template, eol, includeNamespaces))
-                .AndThen(async creator => await creator.create(templatesPath, pathWithoutExtension, newFilename));
+            return TemplateConfiguration.create(template, eol, includeNamespaces, useFileScopedNamespace, isTargetFrameworkAboveEqualNet6)
+                .AndThen(config => CSharpFileCreator.create(config)
+                    .AndThen(async creator => await creator.create(templatesPath, pathWithoutExtension, newFilename)));
         }));
 
         if (createdFilesResult.some(result => result.isErr())) {

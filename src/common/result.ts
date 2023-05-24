@@ -53,5 +53,5 @@ export default class Result<T> {
     }
 
     public static ok<T>(value: T): Result<T> { return new Result(value, Status.success(), undefined); }
-    public static error<T>(innerStatus ='error', info: string | undefined): Result<T> { return new Result<T>(undefined, Status.error(innerStatus), info); }
+    public static error<T>(innerStatus: string, info: string | undefined): Result<T> { return new Result<T>(undefined, Status.error(innerStatus), info); }
 }

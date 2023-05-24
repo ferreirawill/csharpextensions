@@ -2,17 +2,22 @@ import { EOL } from 'os';
 
 import { ExtensionError } from '../util';
 import { TemplateType } from './templateType';
+import Template from './template';
+import Result from '../common/result';
+import templateConfigurationStatuses from './templateConfigurationStatuses';
 
 export default class TemplateConfiguration {
     private _templateType: TemplateType;
     private _includeNamespaces: boolean;
+    private _useFileScopedNamespace: boolean;
     private _eolSettings: string;
     private _requiredUsings: Array<string>;
     private _optionalUsings: Array<string>;
 
-    private constructor(templateType: TemplateType, includeNamespaces: boolean, eolSettings: string, requiredUsings: Array<string>, optionalUsings: Array<string>) {
+    private constructor(templateType: TemplateType, includeNamespaces: boolean, useFileScopedNamespace: boolean, eolSettings: string, requiredUsings: Array<string>, optionalUsings: Array<string>) {
         this._templateType = templateType;
         this._includeNamespaces = includeNamespaces;
+        this._useFileScopedNamespace = useFileScopedNamespace;
         this._eolSettings = eolSettings;
         this._requiredUsings = requiredUsings;
         this._optionalUsings = optionalUsings;
@@ -20,17 +25,26 @@ export default class TemplateConfiguration {
 
     public getTemplateType(): TemplateType { return this._templateType; }
     public getIncludeNamespaces(): boolean { return this._includeNamespaces; }
+    public getUseFileScopedNamespace(): boolean { return this._useFileScopedNamespace; }
     public getEolSettings(): string { return this._eolSettings; }
     public getRequiredUsings(): Array<string> { return this._requiredUsings; }
     public getOptionalUsings(): Array<string> { return this._optionalUsings; }
 
-    public static create(type: TemplateType, eol: string, includeNamespaces: boolean): TemplateConfiguration {
+    public static create(type: TemplateType, eol: string, includeNamespaces: boolean, useFileScopedNamespace = false, isTargetFrameworkAboveNet6: boolean): Result<TemplateConfiguration> {
+        if (type === TemplateType.Record && !isTargetFrameworkAboveNet6) {
+            Result.error<TemplateConfiguration>(templateConfigurationStatuses.templateConfigurationCreationError, 'The target .NET framework does not support Record');
+        }
+
         const eolSettings = TemplateConfiguration.getEolSetting(eol);
+        let canUseFileScopedNamespace = false;
+        if (Template.getExtension(type).endsWith('.cs') && useFileScopedNamespace && isTargetFrameworkAboveNet6) {
+            canUseFileScopedNamespace = true;
+        }
 
         const requiredUsings = TemplateConfiguration.retrieveRequiredUsings(type);
         const optionalUsings = TemplateConfiguration.retrieveOptionalUsings(type);
 
-        return new TemplateConfiguration(type, includeNamespaces, eolSettings, requiredUsings, optionalUsings);
+        return Result.ok<TemplateConfiguration>(new TemplateConfiguration(type, includeNamespaces, canUseFileScopedNamespace, eolSettings, requiredUsings, optionalUsings));
     }
 
     private static getEolSetting(eol: string): string {
@@ -50,6 +64,7 @@ export default class TemplateConfiguration {
             case TemplateType.Inteface:
             case TemplateType.Enum:
             case TemplateType.Struct:
+            case TemplateType.Record:
                 return [];
             case TemplateType.Controller:
                 return [
@@ -91,6 +106,7 @@ export default class TemplateConfiguration {
             case TemplateType.Inteface:
             case TemplateType.Enum:
             case TemplateType.Struct:
+            case TemplateType.Record:
             case TemplateType.Controller:
             case TemplateType.ApiController:
             case TemplateType.MsTest:
