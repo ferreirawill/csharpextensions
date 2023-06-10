@@ -1,3 +1,4 @@
+import { EOL } from 'os';
 import { OutputChannel, window } from 'vscode';
 
 let logChannel: OutputChannel | undefined;
@@ -52,5 +53,16 @@ export class ExtensionError extends Error {
 
     public getInternalError(): Error | unknown | undefined {
         return this._internalError;
+    }
+}
+
+export function getEolSetting(eol: string): string {
+    switch (eol) {
+        case '\n':
+        case '\r\n':
+            return eol;
+        case 'auto':
+        default:
+            return EOL;
     }
 }

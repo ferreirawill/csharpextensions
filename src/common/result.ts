@@ -1,6 +1,7 @@
 import Status from './status';
 
 type Func<T, T2> = (value: T) => Result<T2>;
+type Map<T, T2> = (value: T) => T2;
 type FuncAsync<T, T2> = (value: T) => Promise<Result<T2>>;
 
 export default class Result<T> {
@@ -47,6 +48,22 @@ export default class Result<T> {
     public AndThen<T2>(fun: FuncAsync<T, T2>): Promise<Result<T2>> {
         if (this.isOk()) {
             return fun(this.value());
+        }
+
+        return Promise.resolve(Result.error<T2>(this.status(), this.info()));
+    }
+
+    public MapSync<T2>(func: Map<T, T2>): Result<T2> {
+        if (this.isOk()) {
+            return Result.ok<T2>(func(this.value()));
+        }
+
+        return Result.error<T2>(this.status(), this.info());
+    }
+
+    public Map<T2>(func: Map<T, T2>): Promise<Result<T2>> {
+        if (this.isOk()) {
+            return Promise.resolve(Result.ok<T2>(func(this.value())));
         }
 
         return Promise.resolve(Result.error<T2>(this.status(), this.info()));

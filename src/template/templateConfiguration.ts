@@ -1,6 +1,4 @@
-import { EOL } from 'os';
-
-import { ExtensionError } from '../util';
+import { ExtensionError, getEolSetting } from '../util';
 import { TemplateType } from './templateType';
 import Template from './template';
 import Result from '../common/result';
@@ -35,7 +33,7 @@ export default class TemplateConfiguration {
             Result.error<TemplateConfiguration>(templateConfigurationStatuses.templateConfigurationCreationError, 'The target .NET framework does not support Record');
         }
 
-        const eolSettings = TemplateConfiguration.getEolSetting(eol);
+        const eolSettings = getEolSetting(eol);
         let canUseFileScopedNamespace = false;
         if (Template.getExtension(type).endsWith('.cs') && useFileScopedNamespace && isTargetFrameworkAboveNet6) {
             canUseFileScopedNamespace = true;
@@ -45,17 +43,6 @@ export default class TemplateConfiguration {
         const optionalUsings = TemplateConfiguration.retrieveOptionalUsings(type);
 
         return Result.ok<TemplateConfiguration>(new TemplateConfiguration(type, includeNamespaces, canUseFileScopedNamespace, eolSettings, requiredUsings, optionalUsings));
-    }
-
-    private static getEolSetting(eol: string): string {
-        switch (eol) {
-            case '\n':
-            case '\r\n':
-                return eol;
-            case 'auto':
-            default:
-                return EOL;
-        }
     }
 
     public static retrieveRequiredUsings(type: TemplateType): Array<string> {
