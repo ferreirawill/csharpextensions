@@ -29,14 +29,6 @@ It can currently be found at:
 
 ![Add constructor from properties](./featureimages/ctorfromprop.gif)
 
-**Add read-only property from constructors**
-
-![Add read-only property from constructors](./featureimages/propfromctor.gif)
-
-**Add property from constructors**
-
-![Add property from constructors](./featureimages/fullpropfromctor.gif)
-
 This extension traverses up the folder tree to find the project.json or *.csproj and uses that as the parent folder to determine namespaces.
 
 -----------------------------------------------------------------------------------------------------------
