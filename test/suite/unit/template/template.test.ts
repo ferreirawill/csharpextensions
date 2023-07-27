@@ -149,7 +149,7 @@ suite('Template', () => {
             assert.strictEqual(path, `${testPath}${sep}${expectedTemplateFileName}`);
         });
         test(`Ctor works for type ${TemplateType[type]}`, () => {
-            const templateConfiguration = TemplateConfiguration.create(type, EOL, true, true, true).value();
+            const templateConfiguration = TemplateConfiguration.create(type, EOL, true, true, true, true, []).value();
             const template = new Template(type, '', templateConfiguration);
             assert.strictEqual(template.getName(), Template.RetriveName(type));
             assert.strictEqual(template.getContent(), '');
@@ -174,25 +174,25 @@ suite('Template', () => {
     ];
     csharpTypes.forEach((type) => {
         test(`${TemplateType[type]} build when no content and using namespace false and file scoped namespace false`, () => {
-            const configuration = TemplateConfiguration.create(type, EOL, false, false, true).value();
+            const configuration = TemplateConfiguration.create(type, EOL, false, false, true, true, []).value();
             const template = new Template(type, '', configuration);
             const result = template.build('test', globalNameSpace);
             assert.strictEqual(result, '');
         });
         test(`${TemplateType[type]} build when no content and using namespace true and file scoped namespace false`, () => {
-            const configuration = TemplateConfiguration.create(type, EOL, true, false, true).value();
+            const configuration = TemplateConfiguration.create(type, EOL, true, false, true, true, []).value();
             const template = new Template(type, '', configuration);
             const result = template.build('test', globalNameSpace);
             assert.strictEqual(result, '');
         });
         test(`${TemplateType[type]} build when no content and using namespace false and file scoped namespace true`, () => {
-            const configuration = TemplateConfiguration.create(type, EOL, false, true, true).value();
+            const configuration = TemplateConfiguration.create(type, EOL, false, true, true, true, []).value();
             const template = new Template(type, '', configuration);
             const result = template.build('test', globalNameSpace);
             assert.strictEqual(result, '');
         });
         test(`${TemplateType[type]} build when namespace gets replaced in non file scope mode`, () => {
-            const configuration = TemplateConfiguration.create(type, EOL, false, false, true).value();
+            const configuration = TemplateConfiguration.create(type, EOL, false, false, true, true, []).value();
             const content = `${EOL}\${namespace}${EOL}{${EOL}}${EOL}`;
             const template = new Template(type, content, configuration);
             const result = template.build('test', globalNameSpace);
@@ -202,7 +202,7 @@ suite('Template', () => {
         });
         test(`${TemplateType[type]} build when namespace gets replaced in non file scope mode but no curly braces`, () => {
             const content = `${EOL}\${namespace}${EOL}`;
-            const configuration = TemplateConfiguration.create(type, EOL, false, false, true).value();
+            const configuration = TemplateConfiguration.create(type, EOL, false, false, true, true, []).value();
             const template = new Template(type, content, configuration);
             const result = template.build('test', globalNameSpace);
             const expectedResult = `${EOL}${globalNameSpace}${EOL}`;
@@ -211,40 +211,40 @@ suite('Template', () => {
         });
         test(`${TemplateType[type]} build when namespace gets replaced in file scope mode`, () => {
             const content = `\${namespace}${EOL}{${EOL}}${EOL}`;
-            const configuration = TemplateConfiguration.create(type, EOL, false, true, true).value();
+            const configuration = TemplateConfiguration.create(type, EOL, false, true, true, true, []).value();
             const template = new Template(type, content, configuration);
             const result = template.build('test', globalNameSpace);
             assert.strictEqual(result, `${globalNameSpace};${EOL}${EOL}${EOL}`);
         });
         test(`${TemplateType[type]} build when EOL gets replaced with \\r\\n`, () => {
             const content = `${EOL}${EOL}${EOL}`;
-            const configuration = TemplateConfiguration.create(type, '\r\n', false, true, true).value();
+            const configuration = TemplateConfiguration.create(type, '\r\n', false, true, true, true, []).value();
             const template = new Template(type, content, configuration);
             const result = template.build('test', globalNameSpace);
             assert.strictEqual(result, '\r\n\r\n\r\n');
         });
         test(`${TemplateType[type]} build when EOL gets replaced with \\n`, () => {
             const content = `${EOL}${EOL}${EOL}`;
-            const configuration = TemplateConfiguration.create(type, '\n', false, true, true).value();
+            const configuration = TemplateConfiguration.create(type, '\n', false, true, true, true, []).value();
             const template = new Template(type, content, configuration);
             const result = template.build('test', globalNameSpace);
             assert.strictEqual(result, '\n\n\n');
         });
         test(`${TemplateType[type]} build when class name gets replaced`, () => {
-            const configuration = TemplateConfiguration.create(type, EOL, true, true, true).value();
+            const configuration = TemplateConfiguration.create(type, EOL, true, true, true, true, []).value();
             const template = new Template(type, '${classname}', configuration);
             const result = template.build('test', globalNameSpace);
             assert.strictEqual(result, 'test');
         });
         test(`${TemplateType[type]} build when no content and using namespace true and file scoped namespace true`, () => {
-            const configuration = TemplateConfiguration.create(type, EOL, true, true, true).value();
+            const configuration = TemplateConfiguration.create(type, EOL, true, true, true, true, []).value();
             const template = new Template(type, '', configuration);
             const result = template.build('test', globalNameSpace);
             assert.strictEqual(result, '');
         });
         test(`${TemplateType[type]} build when namespaces get replaced by required imports`, () => {
             const content = '${namespaces}';
-            const configuration = TemplateConfiguration.create(type, EOL, false, false, true).value();
+            const configuration = TemplateConfiguration.create(type, EOL, false, false, true, false, []).value();
             const template = new Template(type, content, configuration);
             const result = template.build('test', globalNameSpace);
             const expectedResult = configuration.getRequiredUsings();
@@ -253,7 +253,7 @@ suite('Template', () => {
         });
         test(`${TemplateType[type]} build when namespaces get replaced by required and optional imports`, () => {
             const content = '${namespaces}';
-            const configuration = TemplateConfiguration.create(type, EOL, true, false, true).value();
+            const configuration = TemplateConfiguration.create(type, EOL, true, false, true, false, []).value();
             const template = new Template(type, content, configuration);
             const result = template.build('test', globalNameSpace);
             const expectedRequired = configuration.getRequiredUsings();
@@ -262,28 +262,28 @@ suite('Template', () => {
             assert.strictEqual(result, mergeImports(expectedOptional, expectedRequired));
         });
         test(`${TemplateType[type]} FindCursorInTemplate when no content and using namespace false and file scoped namespace false`, () => {
-            const configuration = TemplateConfiguration.create(type, EOL, false, false, false).value();
+            const configuration = TemplateConfiguration.create(type, EOL, false, false, false, true, []).value();
             const template = new Template(type, '', configuration);
             const result = template.findCursorInTemplate('test', globalNameSpace);
 
             assert.strictEqual(result, null);
         });
         test(`${TemplateType[type]} FindCursorInTemplate when no content and using namespace true and file scoped namespace false`, () => {
-            const configuration = TemplateConfiguration.create(type, EOL, true, false, true).value();
+            const configuration = TemplateConfiguration.create(type, EOL, true, false, true, true, []).value();
             const template = new Template(type, '', configuration);
             const result = template.findCursorInTemplate('test', globalNameSpace);
 
             assert.strictEqual(result, null);
         });
         test(`${TemplateType[type]} FindCursorInTemplate when no content and using namespace false and file scoped namespace true`, () => {
-            const configuration = TemplateConfiguration.create(type, EOL, false, true, true).value();
+            const configuration = TemplateConfiguration.create(type, EOL, false, true, true, true, []).value();
             const template = new Template(type, '', configuration);
             const result = template.findCursorInTemplate('test', globalNameSpace);
 
             assert.strictEqual(result, null);
         });
         test(`${TemplateType[type]} FindCursorInTemplate when no content and using namespace true and file scoped namespace true`, () => {
-            const configuration = TemplateConfiguration.create(type, EOL, true, true, true).value();
+            const configuration = TemplateConfiguration.create(type, EOL, true, true, true, true, []).value();
             const template = new Template(type, '', configuration);
             const result = template.findCursorInTemplate('test', globalNameSpace);
 
@@ -291,7 +291,7 @@ suite('Template', () => {
         });
         test(`${TemplateType[type]} FindCursorInTemplate when cursor defined by one line`, () => {
             const content = '${cursor}';
-            const configuration = TemplateConfiguration.create(type, EOL, true, false, false).value();
+            const configuration = TemplateConfiguration.create(type, EOL, true, false, false, true, []).value();
             const template = new Template(type, content, configuration);
             const result = template.findCursorInTemplate('test', globalNameSpace);
 
@@ -300,7 +300,7 @@ suite('Template', () => {
         test(`${TemplateType[type]} FindCursorInTemplate when cursor on second line`, () => {
             const content = `
 \${cursor}`;
-            const configuration = TemplateConfiguration.create(type, EOL, true, false, false).value();
+            const configuration = TemplateConfiguration.create(type, EOL, true, false, false, true, []).value();
             const template = new Template(type, content, configuration);
             const result = template.findCursorInTemplate('test', globalNameSpace);
 

@@ -6,8 +6,14 @@ import CsprojReader from '../../../src/project/csprojReader';
 const fixture_path= path.resolve(__dirname, '../../suite/');
 interface Fixture {
     filename: string,
-    csproj : string,
-    expected : string | undefined,
+    csproj: string,
+    expected?: string,
+}
+
+interface FixtureUsings {
+    filename: string,
+    csproj: string,
+    expected: number,
 }
 
 suite('CsprojReader', () => {
@@ -137,6 +143,104 @@ suite('CsprojReader', () => {
             expected: undefined,
         },
     ];
+
+    const usingsInclude: Array<FixtureUsings > = [
+        {
+            filename: 'first-node-using-include.csproj',
+            csproj: `
+            <Project Sdk="Microsoft.NET.Sdk">
+                <ItemGroup>
+                    <Using Include="" />
+                </ItemGroup>
+            </Project>
+            `, 
+            expected: 1,
+        },
+        {
+            filename: 'last-node-using-include.csproj',
+            csproj: `<Project Sdk="Microsoft.NET.Sdk">
+                        <ItemGroup></ItemGroup>
+                        <ItemGroup></ItemGroup>
+                        <ItemGroup>
+                            <Using Include="" />
+                        </ItemGroup>
+                    </Project>`, 
+            expected: 1,
+        },
+        {
+            filename: 'empty-item-using-include.csproj',
+            csproj: `
+            <Project Sdk="Microsoft.NET.Sdk">
+                <ItemGroup></ItemGroup>
+            </Project>
+            `, 
+            expected: 0,
+        },
+        {
+            filename: 'split-using-include.csproj',
+            csproj: `<Project Sdk="Microsoft.NET.Sdk">
+                        <ItemGroup>
+                            <Using Include="" />
+                        </ItemGroup>
+                        <ItemGroup>
+                            <Using Include="" />
+                        </ItemGroup>
+                        <ItemGroup>
+                            <Using Include="" />
+                        </ItemGroup>
+                    </Project>`, 
+            expected: 3,
+        },
+    ];
+
+    const usingsRemove: Array<FixtureUsings > = [
+        {
+            filename: 'first-node-using-remove.csproj',
+            csproj: `
+            <Project Sdk="Microsoft.NET.Sdk">
+                <ItemGroup>
+                    <Using Remove="" />
+                </ItemGroup>
+            </Project>
+            `, 
+            expected: 1,
+        },
+        {
+            filename: 'last-node-using-remove.csproj',
+            csproj: `<Project Sdk="Microsoft.NET.Sdk">
+                        <ItemGroup></ItemGroup>
+                        <ItemGroup></ItemGroup>
+                        <ItemGroup>
+                            <Using Remove="" />
+                        </ItemGroup>
+                    </Project>`, 
+            expected: 1,
+        },
+        {
+            filename: 'empty-item-using-remove.csproj',
+            csproj: `
+            <Project Sdk="Microsoft.NET.Sdk">
+                <ItemGroup></ItemGroup>
+            </Project>
+            `, 
+            expected: 0,
+        },
+        {
+            filename: 'split-using-remove.csproj',
+            csproj: `<Project Sdk="Microsoft.NET.Sdk">
+                        <ItemGroup>
+                            <Using Remove="" />
+                        </ItemGroup>
+                        <ItemGroup>
+                            <Using Remove="" />
+                        </ItemGroup>
+                        <ItemGroup>
+                            <Using Remove="" />
+                        </ItemGroup>
+                    </Project>`, 
+            expected: 3,
+        },
+    ];
     invalidCsProjFixtures.forEach(({ filename, csproj, expected }) => {
         test(`getRootNamespace from ${filename} with invalid content ${csproj} should return expected result ${expected}`, async () => {
             const filePath = `${fixture_path}/${filename}`;
@@ -167,6 +271,30 @@ suite('CsprojReader', () => {
 
             fs.unlinkSync(filePath);
             assert.strictEqual(actual, expected);
+        });
+    });
+
+    usingsInclude.forEach(({ filename, csproj, expected }) => {
+        test(`getUsingsInclude from ${filename} with content ${csproj} should return expected #n ${expected} elements`, async () => {
+            const filePath = `${fixture_path}/${filename}`;
+            fs.writeFileSync(filePath, csproj);
+            const detector = new CsprojReader(filePath);
+            const actual = await detector.getUsingsInclude();
+
+            fs.unlinkSync(filePath);
+            assert.strictEqual(actual.length, expected);
+        });
+    });
+
+    usingsRemove.forEach(({ filename, csproj, expected }) => {
+        test(`getUsingsRemove from ${filename} with content ${csproj} should return expected #n ${expected} elements`, async () => {
+            const filePath = `${fixture_path}/${filename}`;
+            fs.writeFileSync(filePath, csproj);
+            const detector = new CsprojReader(filePath);
+            const actual = await detector.getUsingsRemove();
+
+            fs.unlinkSync(filePath);
+            assert.strictEqual(actual.length, expected);
         });
     });
 

@@ -10,6 +10,8 @@ import Maybe from './common/maybe';
 import { CommandMapping, createExtensionMappings } from './commandMapping';
 import TemplateConfiguration from './template/templateConfiguration';
 import CsprojReader from './project/csprojReader';
+import GlobalUsingFinder from './project/globalUsings';
+import { uniq } from 'lodash';
 
 const EXTENSION_NAME = 'csharpextensions';
 
@@ -94,13 +96,38 @@ export class Extension {
         const { templates } = mapping;
         const configuration = vscode.workspace.getConfiguration();
         const eol = configuration.get('file.eol', EOL);
-        const includeNamespaces = configuration.get(`${EXTENSION_NAME}.includeNamespaces`, true);
-        const useFileScopedNamespace = configuration.get<boolean>('csharpextensions.useFileScopedNamespace', false);
+        const usingsInclude = configuration.get(`${EXTENSION_NAME}.usings.include`, true);
+        const usingsImplicit = configuration.get(`${EXTENSION_NAME}.usings.implicit`, true);
+        const useFileScopedNamespace = configuration.get<boolean>(`${EXTENSION_NAME}.useFileScopedNamespace`, false);
         const csprojReader = await CsprojReader.createFromPath(`${pathWithoutExtension}.cs`);
-        const isTargetFrameworkAboveEqualNet6 = !!csprojReader && await csprojReader.isTargetFrameworkHigherThanOrEqualToDotNet6() === true;
+        const isTargetFrameworkAboveEqualNet6 = await csprojReader?.isTargetFrameworkHigherThanOrEqualToDotNet6() === true;
+        let globalUsings: string[] = [];
+        let useImplicitUsings = false;
+        if (csprojReader && isTargetFrameworkAboveEqualNet6) {
+            const frameworkVersion = (await csprojReader.getTargetFramework()) as string;
+            const globalUsingsResult = await GlobalUsingFinder.find(csprojReader.getFilePath(), frameworkVersion);
+            if (globalUsingsResult.isOk()) {
+                globalUsings = globalUsingsResult.value();
+            }
+
+            useImplicitUsings = usingsImplicit && await csprojReader.useImplicitUsings() === true;
+
+            const namespaceInclude = await csprojReader.getUsingsInclude();
+            const namespaceRemove = await csprojReader.getUsingsRemove();
+            globalUsings.push(...namespaceInclude);
+            globalUsings = uniq(globalUsings).filter(gu => !namespaceRemove.includes(gu));
+        }
 
         const createdFilesResult = await Promise.all(templates.map(async template => {
-            return TemplateConfiguration.create(template, eol, includeNamespaces, useFileScopedNamespace, isTargetFrameworkAboveEqualNet6)
+            return TemplateConfiguration.create(
+                template,
+                eol,
+                usingsInclude,
+                useFileScopedNamespace,
+                isTargetFrameworkAboveEqualNet6,
+                useImplicitUsings,
+                globalUsings,
+            )
                 .AndThen(config => CSharpFileCreator.create(config)
                     .AndThen(async creator => await creator.create(templatesPath, pathWithoutExtension, newFilename)));
         }));

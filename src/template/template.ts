@@ -92,17 +92,24 @@ export default class Template {
         return result;
     }
 
+    private _removeImplicitUsings(usings: string[], implicitUsings: Array<string>): string[] {
+        return usings.filter(using => ! implicitUsings.includes(using));
+    }
+
     private _handleUsings(): string {
         const includeNamespaces = this._configuration.getIncludeNamespaces();
+        const skipImplicit = this._configuration.getUseImplicitUsings();
         const eol = this._configuration.getEolSettings();
         let usings = this._configuration.getRequiredUsings();
         if (includeNamespaces) usings = usings.concat(this._configuration.getOptionalUsings());
+        if (skipImplicit) usings = this._removeImplicitUsings(usings, this._configuration.getImplicitUsings());
 
         if (!usings.length) return '';
 
-        const uniqueUsings = uniq(usings);
-        const sortedUsings = sortBy(uniqueUsings, [(using) => !using.startsWith('System'), (using) => using]);
-        const joinedUsings = sortedUsings
+        usings = uniq(usings);
+        usings = sortBy(usings, [(using) => !using.startsWith('System'), (using) => using]);
+
+        const joinedUsings = usings
             .map(using => `using ${using};`)
             .join(eol);
 
@@ -188,5 +195,4 @@ export default class Template {
 
         return path.join(templatesPath, `${templateName}.tmpl`);
     }
-
 }

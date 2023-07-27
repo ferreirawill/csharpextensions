@@ -2,7 +2,7 @@ import { Uri, workspace } from 'vscode';
 import { Parser } from 'xml2js';
 import { log } from '../util';
 
-import { Csproj, PropertyGroup } from './csproj';
+import { Csproj, PropertyGroup, Using } from './csproj';
 import ProjectReader from './projectReader';
 
 
@@ -76,6 +76,29 @@ export default class CsprojReader extends ProjectReader {
     }
 
     /**
+     * Whether the 'ImplicitUsings' option is set to `enable`
+     *
+     * @returns If the 'ImplicitUsings' option is set to `enable`
+     */
+    public async useImplicitUsings(): Promise<boolean> {
+        let propertyGroups: PropertyGroup[] | undefined;
+        let propertyGroupWithImplicitUsings: PropertyGroup | undefined;
+
+        try {
+            propertyGroups = await this.getPropertyGroups();
+            propertyGroupWithImplicitUsings = propertyGroups?.find(p => p.ImplicitUsings);
+        } catch (errParsingXml) {
+            console.error('Error parsing project xml', errParsingXml);
+
+            return false;
+        }
+
+        if (!propertyGroupWithImplicitUsings?.ImplicitUsings) return false;
+
+        return propertyGroupWithImplicitUsings.ImplicitUsings[0] === 'enable';
+    }
+
+    /**
      * Retrieve the content of this project file
      *
      * @returns The content of this project file
@@ -109,6 +132,28 @@ export default class CsprojReader extends ProjectReader {
     }
 
     /**
+     * Retrieves the usings include of this project file
+     *
+     * @returns the list of namespace to be include
+     */
+    public async getUsingsInclude(): Promise<string[]> {
+        const usings = await this.getUsings();
+
+        return usings.filter(u => u.$ !== undefined && u.$.Include !== undefined).map(u => u.$?.Include as string);
+    }
+
+    /**
+     * Retrieves the usings remove of this project file
+     *
+     * @returns the list of namespace to not be include
+     */
+    public async getUsingsRemove(): Promise<string[]> {
+        const usings = await this.getUsings();
+
+        return usings.filter(u => u.$ !== undefined && u.$.Remove !== undefined).map(u => u.$?.Remove as string);
+    }
+
+    /**
      * Tries to create a new csproj reader from the given path, searched upwards
      *
      * @param findFromPath The path from where to start looking for a .csproj-file
@@ -116,5 +161,25 @@ export default class CsprojReader extends ProjectReader {
      */
     public static async createFromPath(findFromPath: string): Promise<CsprojReader | undefined> {
         return await this.createProjectFromPath(findFromPath, '*.csproj');
+    }
+
+    private async getUsings(): Promise<Using[]> {
+        const xmlContent = await this.getXmlContent();
+        if (!xmlContent?.Project?.ItemGroup) {
+            return [];
+        }
+
+        const itemGroups =  xmlContent.Project.ItemGroup.filter(g => g.Using !== undefined);
+
+        const usings: Using[] = [];
+        itemGroups.forEach(g => {
+            if (!g.Using) {
+                return;
+            }
+
+            usings.push(...g.Using);
+        });
+
+        return usings;
     }
 }

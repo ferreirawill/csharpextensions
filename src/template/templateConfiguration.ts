@@ -11,14 +11,27 @@ export default class TemplateConfiguration {
     private _eolSettings: string;
     private _requiredUsings: Array<string>;
     private _optionalUsings: Array<string>;
+    private _useImplicitUsings: boolean;
+    private _implicitUsings: Array<string>;
 
-    private constructor(templateType: TemplateType, includeNamespaces: boolean, useFileScopedNamespace: boolean, eolSettings: string, requiredUsings: Array<string>, optionalUsings: Array<string>) {
+    private constructor(
+        templateType: TemplateType,
+        includeNamespaces: boolean,
+        useFileScopedNamespace: boolean,
+        eolSettings: string,
+        requiredUsings: Array<string>,
+        optionalUsings: Array<string>,
+        useImplicitUsings: boolean,
+        implicitUsings: Array<string>,
+    ) {
         this._templateType = templateType;
         this._includeNamespaces = includeNamespaces;
         this._useFileScopedNamespace = useFileScopedNamespace;
         this._eolSettings = eolSettings;
         this._requiredUsings = requiredUsings;
         this._optionalUsings = optionalUsings;
+        this._useImplicitUsings = useImplicitUsings;
+        this._implicitUsings = implicitUsings;
     }
 
     public getTemplateType(): TemplateType { return this._templateType; }
@@ -27,10 +40,23 @@ export default class TemplateConfiguration {
     public getEolSettings(): string { return this._eolSettings; }
     public getRequiredUsings(): Array<string> { return this._requiredUsings; }
     public getOptionalUsings(): Array<string> { return this._optionalUsings; }
+    public getUseImplicitUsings(): boolean { return this._useImplicitUsings; }
+    public getImplicitUsings(): Array<string> { return this._implicitUsings; }
 
-    public static create(type: TemplateType, eol: string, includeNamespaces: boolean, useFileScopedNamespace = false, isTargetFrameworkAboveNet6: boolean): Result<TemplateConfiguration> {
+    public static create(
+        type: TemplateType,
+        eol: string,
+        includeNamespaces: boolean,
+        useFileScopedNamespace = false,
+        isTargetFrameworkAboveNet6: boolean,
+        useImplicitUsings: boolean,
+        implictUsings: Array<string>,
+    ): Result<TemplateConfiguration> {
         if (type === TemplateType.Record && !isTargetFrameworkAboveNet6) {
-            Result.error<TemplateConfiguration>(templateConfigurationStatuses.templateConfigurationCreationError, 'The target .NET framework does not support Record');
+            Result.error<TemplateConfiguration>(
+                templateConfigurationStatuses.templateConfigurationCreationError,
+                'The target .NET framework does not support Record',
+            );
         }
 
         const eolSettings = getEolSetting(eol);
@@ -42,7 +68,18 @@ export default class TemplateConfiguration {
         const requiredUsings = TemplateConfiguration.retrieveRequiredUsings(type);
         const optionalUsings = TemplateConfiguration.retrieveOptionalUsings(type);
 
-        return Result.ok<TemplateConfiguration>(new TemplateConfiguration(type, includeNamespaces, canUseFileScopedNamespace, eolSettings, requiredUsings, optionalUsings));
+        return Result.ok<TemplateConfiguration>(
+            new TemplateConfiguration(
+                type,
+                includeNamespaces,
+                canUseFileScopedNamespace,
+                eolSettings,
+                requiredUsings,
+                optionalUsings,
+                useImplicitUsings,
+                implictUsings,
+            )
+        );
     }
 
     public static retrieveRequiredUsings(type: TemplateType): Array<string> {

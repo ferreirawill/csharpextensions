@@ -197,10 +197,10 @@ export default class CodeActionProvider implements VSCodeCodeActionProvider {
 
     private _findFileScopedNamespace(document: TextDocument): Result<boolean> {
         let lineNo = 0;
+        let isFileScopedNamespace = false;
         while (lineNo < document.lineCount) {
             const line = document.lineAt(lineNo);
             if (line.text.trim().startsWith('namespace')) {
-                let isFileScopedNamespace = false;
                 if (line.text.trim().endsWith(';')) {
                     isFileScopedNamespace = true;
                 }

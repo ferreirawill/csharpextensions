@@ -27,8 +27,8 @@ suite('TemplateConfiguration', () => {
         TemplateType.UWPWindowXml,
     ];
     allTypes.forEach((type) => {
-        test(`create for type ${TemplateType[type]} with include namaspaces true, default eol and File scoped namespace for cs template true`, () => {
-            const configurationResult = TemplateConfiguration.create(type, EOL, true, true, true);
+        test(`create for type ${TemplateType[type]} with include namaspaces true, default eol, File scoped namespace for cs template true and use implicit using true`, () => {
+            const configurationResult = TemplateConfiguration.create(type, EOL, true, true, true, true, []);
 
             assert.strictEqual(configurationResult.isOk(), true);
             const configuration = configurationResult.value();
@@ -37,11 +37,28 @@ suite('TemplateConfiguration', () => {
             assert.strictEqual(configuration.getUseFileScopedNamespace(), Template.getExtension(type).endsWith('.cs') ? true : false);
             assert.deepStrictEqual(configuration.getRequiredUsings(), getRequiredImports(type));
             assert.deepStrictEqual(configuration.getOptionalUsings(), getOptionalImports(type));
+            assert.strictEqual(configuration.getUseImplicitUsings(), true);
+            assert.deepStrictEqual(configuration.getImplicitUsings(), []);
+        });
+    });
+    allTypes.forEach((type) => {
+        test(`create for type ${TemplateType[type]} with include namaspaces true, default eol, File scoped namespace for cs template true and use implicit using false`, () => {
+            const configurationResult = TemplateConfiguration.create(type, EOL, true, true, true, false, []);
+
+            assert.strictEqual(configurationResult.isOk(), true);
+            const configuration = configurationResult.value();
+            assert.strictEqual(configuration.getIncludeNamespaces(), true);
+            assert.strictEqual(configuration.getEolSettings(), EOL);
+            assert.strictEqual(configuration.getUseFileScopedNamespace(), Template.getExtension(type).endsWith('.cs') ? true : false);
+            assert.deepStrictEqual(configuration.getRequiredUsings(), getRequiredImports(type));
+            assert.deepStrictEqual(configuration.getOptionalUsings(), getOptionalImports(type));
+            assert.strictEqual(configuration.getUseImplicitUsings(), false);
+            assert.deepStrictEqual(configuration.getImplicitUsings(), []);
         });
     });
     allTypes.forEach((type) => {
         test(`create for type ${TemplateType[type]} with include namaspaces true, default eol and File scoped namespace  false`, () => {
-            const configurationResult = TemplateConfiguration.create(type, EOL, true, false, true);
+            const configurationResult = TemplateConfiguration.create(type, EOL, true, false, true, true, []);
 
             assert.strictEqual(configurationResult.isOk(), true);
             const configuration = configurationResult.value();
@@ -50,11 +67,13 @@ suite('TemplateConfiguration', () => {
             assert.strictEqual(configuration.getUseFileScopedNamespace(), false);
             assert.deepStrictEqual(configuration.getRequiredUsings(), getRequiredImports(type));
             assert.deepStrictEqual(configuration.getOptionalUsings(), getOptionalImports(type));
+            assert.strictEqual(configuration.getUseImplicitUsings(), true);
+            assert.deepStrictEqual(configuration.getImplicitUsings(), []);
         });
     });
     allTypes.forEach((type) => {
         test(`create for type ${TemplateType[type]} with include namaspaces true, default eol and File scoped namespace  false and older target framework`, () => {
-            const configurationResult = TemplateConfiguration.create(type, EOL, true, false, false);
+            const configurationResult = TemplateConfiguration.create(type, EOL, true, false, false, true, []);
 
             if (type !== TemplateType.Record) {
                 assert.strictEqual(configurationResult.isOk(), true);
@@ -64,6 +83,8 @@ suite('TemplateConfiguration', () => {
                 assert.strictEqual(configuration.getUseFileScopedNamespace(), false);
                 assert.deepStrictEqual(configuration.getRequiredUsings(), getRequiredImports(type));
                 assert.deepStrictEqual(configuration.getOptionalUsings(), getOptionalImports(type));
+                assert.strictEqual(configuration.getUseImplicitUsings(), true);
+                assert.deepStrictEqual(configuration.getImplicitUsings(), []);
             } else {
                 assert.strictEqual(configurationResult.isErr(), true);
                 assert.strictEqual(configurationResult.status(), 'error');
@@ -73,7 +94,7 @@ suite('TemplateConfiguration', () => {
     });
     allTypes.forEach((type) => {
         test(`create for type ${TemplateType[type]} with include namaspaces false and default eol and File scoped namespace for cs template true`, () => {
-            const configurationResult = TemplateConfiguration.create(type, EOL, false, true, true);
+            const configurationResult = TemplateConfiguration.create(type, EOL, false, true, true, true, []);
 
             assert.strictEqual(configurationResult.isOk(), true);
             const configuration = configurationResult.value();
@@ -82,11 +103,13 @@ suite('TemplateConfiguration', () => {
             assert.strictEqual(configuration.getUseFileScopedNamespace(), Template.getExtension(type).endsWith('.cs') ? true : false);
             assert.deepStrictEqual(configuration.getRequiredUsings(), getRequiredImports(type));
             assert.deepStrictEqual(configuration.getOptionalUsings(), getOptionalImports(type));
+            assert.strictEqual(configuration.getUseImplicitUsings(), true);
+            assert.deepStrictEqual(configuration.getImplicitUsings(), []);
         });
     });
     allTypes.forEach((type) => {
         test(`create for type ${TemplateType[type]} with include namaspaces false and default eol and File scoped namespace for cs template false`, () => {
-            const configurationResult = TemplateConfiguration.create(type, EOL, false, true, false);
+            const configurationResult = TemplateConfiguration.create(type, EOL, false, true, false, true, []);
 
             assert.strictEqual(configurationResult.isOk(), true);
             const configuration = configurationResult.value();
@@ -95,11 +118,13 @@ suite('TemplateConfiguration', () => {
             assert.strictEqual(configuration.getUseFileScopedNamespace(), false);
             assert.deepStrictEqual(configuration.getRequiredUsings(), getRequiredImports(type));
             assert.deepStrictEqual(configuration.getOptionalUsings(), getOptionalImports(type));
+            assert.strictEqual(configuration.getUseImplicitUsings(), true);
+            assert.deepStrictEqual(configuration.getImplicitUsings(), []);
         });
     });
     ['\n', '\r\n', 'someString'].forEach((eolSetting) => {
         test(`create  with eol ${eolSetting}`, async () => {
-            const configurationResult = TemplateConfiguration.create(TemplateType.Class, eolSetting, true, true, true);
+            const configurationResult = TemplateConfiguration.create(TemplateType.Class, eolSetting, true, true, true, true, []);
 
             const configuration = configurationResult.value();
             assert.strictEqual(configuration.getEolSettings(), eolSetting === 'someString' ? EOL : eolSetting);
@@ -107,6 +132,8 @@ suite('TemplateConfiguration', () => {
             assert.strictEqual(configuration.getUseFileScopedNamespace(), true);
             assert.deepStrictEqual(configuration.getRequiredUsings(), getRequiredImports(TemplateType.Class));
             assert.deepStrictEqual(configuration.getOptionalUsings(), getOptionalImports(TemplateType.Class));
+            assert.strictEqual(configuration.getUseImplicitUsings(), true);
+            assert.deepStrictEqual(configuration.getImplicitUsings(), []);
         });
     });
 });
