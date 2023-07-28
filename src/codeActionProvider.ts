@@ -26,6 +26,7 @@ const SPACE = ' ';
 export default class CodeActionProvider implements VSCodeCodeActionProvider {
     private _commandIds = {
         ctorFromProperties: 'csharpextensions.ctorFromProperties',
+        bodyExpressionCtorFromProperties: 'csharpextensions.bodyExpressionCtorFromProperties',
     };
 
     private static readonly ReadonlyRegex = new RegExp(/(public|private|protected)\s(\w+)\s(\w+)\s?{\s?(get;)\s?(private\s)?(set;)?\s?}/g);
@@ -33,6 +34,7 @@ export default class CodeActionProvider implements VSCodeCodeActionProvider {
 
     constructor() {
         commands.registerCommand(this._commandIds.ctorFromProperties, this.executeCtorFromProperties, this);
+        commands.registerCommand(this._commandIds.bodyExpressionCtorFromProperties, this.executeBodyExpressionCtorFromProperties, this);
     }
 
     public provideCodeActions(document: TextDocument, range: Range | Selection, context: CodeActionContext): CodeAction[] {
@@ -41,15 +43,23 @@ export default class CodeActionProvider implements VSCodeCodeActionProvider {
         }
 
         const codeActions = new Array<CodeAction>();
-        const result = this._getActiveTextEditor()
-            .AndThenSync((editor) => {
-                return this._getCtorpAction(document, editor);
-            });
+        const resultEditor = this._getActiveTextEditor();
 
-        if (result.isOk()) {
-            codeActions.push(result.value());
-        } else {
-            console.error(result.info());
+        if (resultEditor.isErr()) {
+            console.error(resultEditor.info());
+
+            return codeActions;
+        }
+
+        const editor = resultEditor.value();
+        const ctorActionResult = this._buildCtorActions(document, editor, 'Initialize ctor from properties...', this._commandIds.ctorFromProperties);
+        if (ctorActionResult.isOk()) {
+            codeActions.push(ctorActionResult.value());
+        }
+
+        const bodyExpressionCtorAction =  this._buildCtorActions(document,  editor, 'Initialize body expression ctor from properties...', this._commandIds.bodyExpressionCtorFromProperties);
+        if (bodyExpressionCtorAction.isOk()) {
+            codeActions.push(bodyExpressionCtorAction.value());
         }
 
         return codeActions;
@@ -89,7 +99,7 @@ export default class CodeActionProvider implements VSCodeCodeActionProvider {
 
         const assignments = args.properties
             .map(prop => `${this._getIndentation(tabSize, (indentationLevel + 1))}this.${prop.name} = ${this.camelize(prop.name)};${eol}`);
-        
+
         const { modifier, className } = args.classDefinition;
 
         const firstPropertyLine = args.properties.sort((a, b) => a.lineNumber - b.lineNumber)[0].lineNumber;
@@ -104,39 +114,103 @@ export default class CodeActionProvider implements VSCodeCodeActionProvider {
         const ctorEdit = new TextEdit(range, ctorStatement);
 
         edits.push(ctorEdit);
+        edit.set(args.document.uri, edits);
 
-        await this.formatDocument(args.document.uri, edit, edits);
+        await workspace.applyEdit(edit);
+
+        const reFormatAfterChange = configuration.get('csharpextensions.reFormatAfterChange', true);
+        if (reFormatAfterChange) {
+            await this.formatDocument(args.document.uri);
+        }
+    }
+
+    private async executeBodyExpressionCtorFromProperties(args: ConstructorFromPropertiesArgument) {
+        const configuration = workspace.getConfiguration();
+        const eol = getEolSetting(configuration.get('file.eol', os.EOL));
+        const tabSize = configuration.get('editor.tabSize', 4);
+        const ctorParams = new Array<string>();
+        const indentationLevel = args.isFileScopedNamespace ? 1 : 2;
+
+        if (!args.properties)
+            return;
+
+        args.properties.forEach((p) => {
+            ctorParams.push(`${p.type} ${this.camelize(p.name)}`);
+        });
+
+        const tupleLeft = args.properties
+            .map(prop => `this.${prop.name}`).join(' , ');
+        const tupleRight = args.properties
+            .map(prop => `${this.camelize(prop.name)}`).join(' , ');
+        const assignment = args.properties.length === 1 ? `${tupleLeft} = ${tupleRight}`: `(${tupleLeft}) = (${tupleRight})`;
+
+        const { modifier, className } = args.classDefinition;
+
+        const firstPropertyLine = args.properties.sort((a, b) => a.lineNumber - b.lineNumber)[0].lineNumber;
+        const constructorIndentation = this._getIndentation(tabSize, (indentationLevel));
+        const ctorStatement = `${constructorIndentation}${modifier} ${className}(${ctorParams.join(', ')})${eol}${this._getIndentation(tabSize, (indentationLevel + 1))}=> ${assignment};${eol}${eol}`;
+
+        const edit = new WorkspaceEdit();
+        const edits = new Array<TextEdit>();
+
+        const pos = new Position(firstPropertyLine, 0);
+        const range = new Range(pos, pos);
+        const ctorEdit = new TextEdit(range, ctorStatement);
+
+        edits.push(ctorEdit);
+        edit.set(args.document.uri, edits);
+
+        await workspace.applyEdit(edit);
+
+        const reFormatAfterChange = configuration.get('csharpextensions.reFormatAfterChange', true);
+        if (reFormatAfterChange) {
+            await this.formatDocument(args.document.uri);
+        }
     }
 
     private _getIndentation(tabSize: number, indentation: number): string {
         return EMPTY.padStart((tabSize * indentation), SPACE);
     }
 
-    private async formatDocument(documentUri: Uri, edit: WorkspaceEdit, edits: Array<TextEdit>) {
-        edit.set(documentUri, edits);
+    private async formatDocument(documentUri: Uri) {
+        try {
+            const formattingEdits = await commands.executeCommand<TextEdit[]>('vscode.executeFormatDocumentProvider', documentUri,);
 
-        const reFormatAfterChange = workspace.getConfiguration().get('csharpextensions.reFormatAfterChange', true);
+            if (formattingEdits !== undefined) {
+                const formatEdit = new WorkspaceEdit();
 
-        await workspace.applyEdit(edit);
+                formatEdit.set(documentUri, formattingEdits);
 
-        if (reFormatAfterChange) {
-            try {
-                const formattingEdits = await commands.executeCommand<TextEdit[]>('executeFormatDocumentProvider', documentUri);
-
-                if (formattingEdits !== undefined) {
-                    const formatEdit = new WorkspaceEdit();
-
-                    formatEdit.set(documentUri, formattingEdits);
-
-                    workspace.applyEdit(formatEdit);
-                }
-            } catch (err) {
-                log('Error trying to format document - ', err);
+                workspace.applyEdit(formatEdit);
             }
+        } catch (err) {
+            log('Error trying to format document - ', err);
         }
     }
 
-    private _getCtorpAction(document: TextDocument, editor: TextEditor): Result<CodeAction> {
+    private _buildCtorActions(document: TextDocument, editor: TextEditor, actionTitle: string, command: string): Result<CodeAction> {
+        return this._findCtorDefinitionAndProperties(document, editor)
+            .AndThenSync(classDefinition => {
+                const parameter: ConstructorFromPropertiesArgument = {
+                    properties: classDefinition.properties,
+                    classDefinition: classDefinition.classDefinition,
+                    document: document,
+                    isFileScopedNamespace: classDefinition.isFileScoped,
+                };
+
+                const codeAction = new CodeAction(actionTitle, CodeActionKind.RefactorExtract);
+
+                codeAction.command = {
+                    title: codeAction.title,
+                    command,
+                    arguments: [parameter]
+                };
+
+                return Result.ok<CodeAction>(codeAction);
+            });
+    }
+
+    private _findCtorDefinitionAndProperties(document: TextDocument, editor: TextEditor): Result<CSharpClass> {
         const position = editor.selection.active;
 
         return this._findFileScopedNamespace(document)
@@ -173,25 +247,7 @@ export default class CodeActionProvider implements VSCodeCodeActionProvider {
                         return Result.error<CSharpClass>('NotFoundError', 'Properties not found');
                     }
 
-                    return Result.ok<CSharpClass>({ properties, classDefinition: withinClass });
-                })
-                .AndThenSync(classDefinition => {
-                    const parameter: ConstructorFromPropertiesArgument = {
-                        properties: classDefinition.properties,
-                        classDefinition: classDefinition.classDefinition,
-                        document: document,
-                        isFileScopedNamespace: isFileScoped,
-                    };
-
-                    const codeAction = new CodeAction('Initialize ctor from properties...', CodeActionKind.RefactorExtract);
-
-                    codeAction.command = {
-                        title: codeAction.title,
-                        command: this._commandIds.ctorFromProperties,
-                        arguments: [parameter]
-                    };
-
-                    return Result.ok<CodeAction>(codeAction);
+                    return Result.ok<CSharpClass>({ properties, classDefinition: withinClass, isFileScoped });
                 }));
     }
 
@@ -220,15 +276,16 @@ export default class CodeActionProvider implements VSCodeCodeActionProvider {
 
         while (lineNo >= 0) {
             const line = document.lineAt(lineNo);
-            const match = CodeActionProvider.ClassRegex.exec(line.text);
+            const match = Array.from(line.text.trim().matchAll(CodeActionProvider.ClassRegex));
 
-            if (match) {
+            if (match.length > 0) {
+
                 return Result.ok<CSharpClassDefinition>({
                     startLine: lineNo,
                     endLine: -1,
-                    className: match[3],
-                    modifier: match[1],
-                    statement: match[0]
+                    className: match[0][3],
+                    modifier: match[0][1],
+                    statement: match[0][0]
                 });
             }
 
@@ -259,6 +316,7 @@ interface CSharpPropertyDefinition {
 interface CSharpClass {
     properties: CSharpPropertyDefinition[],
     classDefinition: CSharpClassDefinition,
+    isFileScoped: boolean,
 }
 
 interface ConstructorFromPropertiesArgument {

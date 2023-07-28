@@ -21,13 +21,13 @@ It can currently be found at:
 
 ![Add C# Interface](./featureimages/newinterface.gif)
 
-**Add fields from constructors**
-
-![Add fields from constructors](./featureimages/fieldfromctor.gif)
-
 **Add constructor from properties**
 
 ![Add constructor from properties](./featureimages/ctorfromprop.gif)
+
+**Add body expression constructor from properties**
+
+![Add body expression constructor from properties](./featureimages/bodyExpressionCtorAction.gif)
 
 This extension traverses up the folder tree to find the project.json or *.csproj and uses that as the parent folder to determine namespaces.
 
