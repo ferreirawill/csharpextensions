@@ -1,12 +1,23 @@
 import * as assert from 'assert';
-import * as path from 'path';
+import { beforeEach, afterEach } from 'mocha';
 import * as fs from 'fs';
-import CsprojReader from '../../../src/project/csprojReader';
+import * as path from 'path';
+import * as sinon from 'sinon';
 
-const fixture_path= path.resolve(__dirname, '../../suite/');
+import CsprojReader from '../../../src/project/csprojReader';
+import FileHandler from '../../../src/io/fileHandler';
+
+const fixture_path = path.resolve(__dirname, '../../suite/');
 interface Fixture {
     filename: string,
     csproj: string,
+    expected?: string,
+}
+
+interface ImportFixture {
+    filename: string,
+    csproj: string,
+    targets: string,
     expected?: string,
 }
 
@@ -17,7 +28,26 @@ interface FixtureUsings {
 }
 
 suite('CsprojReader', () => {
-    const validTargetFramework : Array<string> = [
+    let fakeFileHandler: {
+        fileExists: () => Promise<boolean>,
+        read: () => Promise<string>,
+        write: () => Promise<void>,
+    };
+
+    beforeEach(() => {
+        fakeFileHandler = {
+            fileExists: sinon.fake.resolves(false),
+            read: sinon.fake.resolves('template content'),
+            write: sinon.fake.resolves(undefined),
+        };
+    });
+
+    afterEach(() => {
+        sinon.restore();
+        sinon.reset();
+    });
+
+    const validTargetFramework: Array<string> = [
         'netcoreapp1.0',
         'netcoreapp1.1',
         'netcoreapp2.0',
@@ -29,7 +59,7 @@ suite('CsprojReader', () => {
         'net6.0',
     ];
 
-    const rootNameSpacefixtures : Array<Fixture> = [
+    const rootNameSpaceFixtures: Array<Fixture> = [
         {
             filename: 'xamarin.csproj',
             csproj: `
@@ -37,7 +67,7 @@ suite('CsprojReader', () => {
                 <PropertyGroup>
                     <RootNamespace>Xamarin.Forms</RootNamespace>
                 </PropertyGroup>
-            </Project>`, 
+            </Project>`,
             expected: 'Xamarin.Forms',
         },
         {
@@ -48,7 +78,7 @@ suite('CsprojReader', () => {
                         <PropertyGroup>
                             <RootNamespace>System.Linq</RootNamespace>
                         </PropertyGroup>
-                    </Project>`, 
+                    </Project>`,
             expected: 'System.Linq',
         },
         {
@@ -57,12 +87,118 @@ suite('CsprojReader', () => {
             <Project Sdk="Microsoft.NET.Sdk">
                 <PropertyGroup>
                 </PropertyGroup>
-            </Project>`, 
+            </Project>`,
             expected: undefined,
         },
         {
             filename: 'only-project-node.csproj',
-            csproj: '<Project Sdk="Microsoft.NET.Sdk"></Project>', 
+            csproj: '<Project Sdk="Microsoft.NET.Sdk"></Project>',
+            expected: undefined,
+        },
+    ];
+
+    const importFixtures: Array<ImportFixture> = [
+        {
+            filename: 'xamarin.csproj',
+            csproj: `
+            <Project Sdk="Microsoft.NET.Sdk">
+                <Import Project="..\\Configuration.targets" />
+            </Project>`,
+            targets: `
+            <Project>
+                <PropertyGroup>
+                    <RootNamespace>Xamarin.Forms</RootNamespace>
+                </PropertyGroup>
+            </Project>`,
+            expected: 'Xamarin.Forms',
+        },
+        {
+            filename: 'linq.csproj',
+            csproj: `<Project Sdk="Microsoft.NET.Sdk">
+                        <Import Project="..\\Configuration.targets" />
+                    </Project>`,
+            targets: `<Project>
+                        <PropertyGroup></PropertyGroup>
+                        <PropertyGroup></PropertyGroup>
+                        <PropertyGroup>
+                            <RootNamespace>System.Linq</RootNamespace>
+                        </PropertyGroup>
+                    </Project>
+            `,
+            expected: 'System.Linq',
+        },
+        {
+            filename: 'empty-group.csproj',
+            csproj: `
+            <Project Sdk="Microsoft.NET.Sdk">
+                <Import Project="..\\Configuration.targets" />
+            </Project>`,
+            targets: `
+            <Project Sdk="Microsoft.NET.Sdk">
+                <PropertyGroup>
+                </PropertyGroup>
+            </Project>`,
+            expected: undefined,
+        },
+        {
+            filename: 'only-project-node.csproj',
+            csproj: '<Project Sdk="Microsoft.NET.Sdk"><Import Project="..\\Configuration.targets" /></Project>',
+            targets: '<Project></Project>',
+            expected: undefined,
+        },
+    ];
+
+    const importTargetFrameworkFixtures: Array<ImportFixture> = [
+        {
+            filename: 'first-node.csproj',
+            csproj: `
+            <Project Sdk="Microsoft.NET.Sdk">
+                <Import Project="..\\Configuration.targets" />
+            </Project>`,
+            targets: `
+            <Project>
+                <PropertyGroup>
+                    <TargetFramework>%PLACE_HOLDER%</TargetFramework>
+                </PropertyGroup>
+            </Project>
+            `,
+            expected: '%PLACE_HOLDER%',
+        },
+        {
+            filename: 'last-node.csproj',
+            csproj: `
+            <Project Sdk="Microsoft.NET.Sdk">
+                <Import Project="..\\Configuration.targets" />
+            </Project>`,
+            targets: `<Project>
+                        <PropertyGroup></PropertyGroup>
+                        <PropertyGroup></PropertyGroup>
+                        <PropertyGroup>
+                            <TargetFramework>%PLACE_HOLDER%</TargetFramework>
+                        </PropertyGroup>
+                    </Project>`,
+            expected: '%PLACE_HOLDER%',
+        },
+        {
+            filename: 'empty-group.csproj',
+            csproj: `
+            <Project Sdk="Microsoft.NET.Sdk">
+                <Import Project="..\\Configuration.targets" />
+            </Project>`,
+            targets: `
+            <Project>
+                <PropertyGroup></PropertyGroup>
+            </Project>
+            `,
+            expected: undefined,
+        },
+        {
+            filename: 'only-project-node.csproj',
+            csproj: `
+            <Project Sdk="Microsoft.NET.Sdk">
+                <Import Project="..\\Configuration.targets" />
+            </Project>`,
+            targets: '<Project></Project>',
             expected: undefined,
         },
     ];
@@ -76,7 +212,7 @@ suite('CsprojReader', () => {
                     <TargetFramework>%PLACE_HOLDER%</TargetFramework>
                 </PropertyGroup>
             </Project>
-            `, 
+            `,
             expected: '%PLACE_HOLDER%',
         },
         {
@@ -87,7 +223,7 @@ suite('CsprojReader', () => {
                         <PropertyGroup>
                             <TargetFramework>%PLACE_HOLDER%</TargetFramework>
                         </PropertyGroup>
-                    </Project>`, 
+                    </Project>`,
             expected: '%PLACE_HOLDER%',
         },
         {
@@ -96,20 +232,20 @@ suite('CsprojReader', () => {
             <Project Sdk="Microsoft.NET.Sdk">
                 <PropertyGroup></PropertyGroup>
             </Project>
-            `, 
+            `,
             expected: undefined,
         },
         {
             filename: 'only-project-node.csproj',
-            csproj: '<Project Sdk="Microsoft.NET.Sdk"></Project>', 
+            csproj: '<Project Sdk="Microsoft.NET.Sdk"></Project>',
             expected: undefined,
         },
     ];
-    
-    const invalidCsProjFixtures : Array<Fixture> = [
+
+    const invalidCsProjFixtures: Array<Fixture> = [
         {
             filename: 'empty.csproj',
-            csproj: '', 
+            csproj: '',
             expected: undefined,
         },
         {
@@ -144,7 +280,7 @@ suite('CsprojReader', () => {
         },
     ];
 
-    const usingsInclude: Array<FixtureUsings > = [
+    const usingsInclude: Array<FixtureUsings> = [
         {
             filename: 'first-node-using-include.csproj',
             csproj: `
@@ -153,7 +289,7 @@ suite('CsprojReader', () => {
                     <Using Include="" />
                 </ItemGroup>
             </Project>
-            `, 
+            `,
             expected: 1,
         },
         {
@@ -164,7 +300,7 @@ suite('CsprojReader', () => {
                         <ItemGroup>
                             <Using Include="" />
                         </ItemGroup>
-                    </Project>`, 
+                    </Project>`,
             expected: 1,
         },
         {
@@ -173,7 +309,7 @@ suite('CsprojReader', () => {
             <Project Sdk="Microsoft.NET.Sdk">
                 <ItemGroup></ItemGroup>
             </Project>
-            `, 
+            `,
             expected: 0,
         },
         {
@@ -188,12 +324,12 @@ suite('CsprojReader', () => {
                         <ItemGroup>
                             <Using Include="" />
                         </ItemGroup>
-                    </Project>`, 
+                    </Project>`,
             expected: 3,
         },
     ];
 
-    const usingsRemove: Array<FixtureUsings > = [
+    const usingsRemove: Array<FixtureUsings> = [
         {
             filename: 'first-node-using-remove.csproj',
             csproj: `
@@ -202,7 +338,7 @@ suite('CsprojReader', () => {
                     <Using Remove="" />
                 </ItemGroup>
             </Project>
-            `, 
+            `,
             expected: 1,
         },
         {
@@ -213,7 +349,7 @@ suite('CsprojReader', () => {
                         <ItemGroup>
                             <Using Remove="" />
                         </ItemGroup>
-                    </Project>`, 
+                    </Project>`,
             expected: 1,
         },
         {
@@ -222,7 +358,7 @@ suite('CsprojReader', () => {
             <Project Sdk="Microsoft.NET.Sdk">
                 <ItemGroup></ItemGroup>
             </Project>
-            `, 
+            `,
             expected: 0,
         },
         {
@@ -237,39 +373,56 @@ suite('CsprojReader', () => {
                         <ItemGroup>
                             <Using Remove="" />
                         </ItemGroup>
-                    </Project>`, 
+                    </Project>`,
             expected: 3,
         },
     ];
     invalidCsProjFixtures.forEach(({ filename, csproj, expected }) => {
         test(`getRootNamespace from ${filename} with invalid content ${csproj} should return expected result ${expected}`, async () => {
             const filePath = `${fixture_path}/${filename}`;
-            fs.writeFileSync(filePath, csproj);
+            fakeFileHandler.read = sinon.fake.resolves(csproj);
+            sinon.replace(FileHandler, 'read', fakeFileHandler.read);
+
             const detector = new CsprojReader(filePath);
             const actual = await detector.getRootNamespace();
 
-            fs.unlinkSync(filePath);
             assert.strictEqual(actual, expected);
         });
         test(`getTargetFramework from ${filename} with invalid content ${csproj} should return expected result ${expected}`, async () => {
             const filePath = `${fixture_path}/${filename}`;
-            fs.writeFileSync(filePath, csproj);
+            fakeFileHandler.read = sinon.fake.resolves(csproj);
+            sinon.replace(FileHandler, 'read', fakeFileHandler.read);
             const detector = new CsprojReader(filePath);
             const actual = await detector.getTargetFramework();
-    
-            fs.unlinkSync(filePath);
+
             assert.strictEqual(actual, expected);
         });
     });
 
-    rootNameSpacefixtures.forEach(({ filename, csproj, expected }) => {
+    rootNameSpaceFixtures.forEach(({ filename, csproj, expected }) => {
         test(`getNamespace from ${filename} with content ${csproj} should return expected result ${expected}`, async () => {
             const filePath = `${fixture_path}/${filename}`;
-            fs.writeFileSync(filePath, csproj);
+            fakeFileHandler.read = sinon.fake.resolves(csproj);
+            sinon.replace(FileHandler, 'read', fakeFileHandler.read);
             const detector = new CsprojReader(filePath);
             const actual = await detector.getRootNamespace();
 
-            fs.unlinkSync(filePath);
+            assert.strictEqual(actual, expected);
+        });
+    });
+
+    importFixtures.forEach(({ filename, csproj, expected, targets }) => {
+        test(`getNamespace from ${filename} with content ${csproj} and targets ${targets} should return expected result ${expected}`, async () => {
+            const filePath = `${fixture_path}/${filename}`;
+            const read = sinon.stub(FileHandler, 'read');
+            read.onCall(0).resolves(csproj);
+            read.onCall(1).resolves(targets);
+            const detector = new CsprojReader(filePath);
+            const actual = await detector.getRootNamespace();
+
+            assert.strictEqual(read.callCount, 2);
+            read.restore();
+            read.reset();
             assert.strictEqual(actual, expected);
         });
     });
@@ -277,11 +430,11 @@ suite('CsprojReader', () => {
     usingsInclude.forEach(({ filename, csproj, expected }) => {
         test(`getUsingsInclude from ${filename} with content ${csproj} should return expected #n ${expected} elements`, async () => {
             const filePath = `${fixture_path}/${filename}`;
-            fs.writeFileSync(filePath, csproj);
+            fakeFileHandler.read = sinon.fake.resolves(csproj);
+            sinon.replace(FileHandler, 'read', fakeFileHandler.read);
             const detector = new CsprojReader(filePath);
             const actual = await detector.getUsingsInclude();
 
-            fs.unlinkSync(filePath);
             assert.strictEqual(actual.length, expected);
         });
     });
@@ -289,31 +442,32 @@ suite('CsprojReader', () => {
     usingsRemove.forEach(({ filename, csproj, expected }) => {
         test(`getUsingsRemove from ${filename} with content ${csproj} should return expected #n ${expected} elements`, async () => {
             const filePath = `${fixture_path}/${filename}`;
-            fs.writeFileSync(filePath, csproj);
+            fakeFileHandler.read = sinon.fake.resolves(csproj);
+            sinon.replace(FileHandler, 'read', fakeFileHandler.read);
             const detector = new CsprojReader(filePath);
             const actual = await detector.getUsingsRemove();
 
-            fs.unlinkSync(filePath);
             assert.strictEqual(actual.length, expected);
         });
     });
 
     targetFrameworkFixtures.forEach(({ filename, csproj, expected }) => {
-        validTargetFramework.forEach((targetFramework, index) =>{
+        validTargetFramework.forEach((targetFramework, index) => {
             test(`getTargetFramework from ${filename} with content ${csproj} should return expected result ${expected}`, async () => {
                 const filePath = `${fixture_path}/${index}-${filename}`;
-                fs.writeFileSync(filePath, csproj.replace('%PLACE_HOLDER%', targetFramework));
+                fakeFileHandler.read = sinon.fake.resolves(csproj.replace('%PLACE_HOLDER%', targetFramework));
+                sinon.replace(FileHandler, 'read', fakeFileHandler.read);
                 const detector = new CsprojReader(filePath);
                 const actual = await detector.getTargetFramework();
 
-                fs.unlinkSync(filePath);
                 assert.strictEqual(actual, expected?.replace('%PLACE_HOLDER%', targetFramework));
             });
             test(`isTargetFrameworkHigherThanOrEqualToDotNet6 ${filename} with content ${csproj} should return expected result ${!expected ? 'undefined' : targetFramework}`, async () => {
                 const filePath = `${fixture_path}/${index}-${filename}`;
-                fs.writeFileSync(filePath, csproj.replace('%PLACE_HOLDER%', targetFramework));
+                fakeFileHandler.read = sinon.fake.resolves(csproj.replace('%PLACE_HOLDER%', targetFramework));
+                sinon.replace(FileHandler, 'read', fakeFileHandler.read);
                 const detector = new CsprojReader(filePath);
-                let framework =  undefined;
+                let framework = undefined;
                 if (expected) {
                     const versionMatch = targetFramework.match(/(?<=net)\d+(\.\d+)*/i);
                     framework = !versionMatch?.length || Number.isNaN(versionMatch[0]) ? false : (Number.parseFloat(versionMatch[0]) >= 6);
@@ -321,13 +475,49 @@ suite('CsprojReader', () => {
 
                 const actual = await detector.isTargetFrameworkHigherThanOrEqualToDotNet6();
 
-                fs.unlinkSync(filePath);
                 assert.strictEqual(actual, framework);
             });
         });
     });
 
-    test('getFilePath return expected result',() => {
+    importTargetFrameworkFixtures.forEach(({ filename, csproj, expected, targets }) => {
+        validTargetFramework.forEach((targetFramework, index) => {
+            test(`getTargetFramework from ${filename} with content ${csproj} should return expected result ${expected}`, async () => {
+                const filePath = `${fixture_path}/${index}-${filename}`;
+                const read = sinon.stub(FileHandler, 'read');
+                read.onCall(0).resolves(csproj);
+                read.onCall(1).resolves(targets.replace('%PLACE_HOLDER%', targetFramework));
+                const detector = new CsprojReader(filePath);
+                const actual = await detector.getTargetFramework();
+
+                assert.strictEqual(read.callCount, 2);
+                read.restore();
+                read.reset();
+                assert.strictEqual(actual, expected?.replace('%PLACE_HOLDER%', targetFramework));
+            });
+            test(`isTargetFrameworkHigherThanOrEqualToDotNet6 ${filename} with content ${csproj} should return expected result ${!expected ? 'undefined' : targetFramework}`, async () => {
+                const filePath = `${fixture_path}/${index}-${filename}`;
+                const read = sinon.stub(FileHandler, 'read');
+                read.onCall(0).resolves(csproj);
+                read.onCall(1).resolves(targets.replace('%PLACE_HOLDER%', targetFramework));
+                const detector = new CsprojReader(filePath);
+                let framework = undefined;
+                if (expected) {
+                    const versionMatch = targetFramework.match(/(?<=net)\d+(\.\d+)*/i);
+                    framework = !versionMatch?.length || Number.isNaN(versionMatch[0]) ? false : (Number.parseFloat(versionMatch[0]) >= 6);
+                }
+
+                const actual = await detector.isTargetFrameworkHigherThanOrEqualToDotNet6();
+
+                assert.strictEqual(read.callCount, 2);
+                read.restore();
+                read.reset();
+                assert.strictEqual(actual, framework);
+            });
+        });
+    });
+
+    test('getFilePath return expected result', () => {
         const filePath = `${fixture_path}/my-fancy-csproj-file`;
         const detector = new CsprojReader(filePath);
         const actual = detector.getFilePath();
@@ -339,8 +529,9 @@ suite('CsprojReader', () => {
         validTargetFramework.forEach((targetFramework, index) => {
             test('createFromPath returns valid CsprojReader instance', async () => {
                 const filePath = path.resolve(fixture_path, `${index}-${filename}`);
+                // actually not replaced by a mock because findProjectPaht uses findupglob.
                 fs.writeFileSync(filePath, csproj.replace('%PLACE_HOLDER%', targetFramework));
-                let framework =  undefined;
+                let framework = undefined;
                 if (expected) {
                     const versionMatch = targetFramework.match(/(?<=net)\d+(\.\d+)*/i);
                     framework = !versionMatch?.length || Number.isNaN(versionMatch[0]) ? false : (Number.parseFloat(versionMatch[0]) >= 6);
@@ -348,13 +539,13 @@ suite('CsprojReader', () => {
 
                 const result = await CsprojReader.createFromPath(filePath);
 
-                fs.unlinkSync(filePath);
                 assert.notStrictEqual(undefined, result);
                 assert.strictEqual(result?.getFilePath(), filePath);
                 const actual = await result?.getTargetFramework();
                 assert.strictEqual(actual, expected?.replace('%PLACE_HOLDER%', targetFramework));
                 const actualTest = await result?.isTargetFrameworkHigherThanOrEqualToDotNet6();
                 assert.strictEqual(actualTest, framework);
+                fs.unlinkSync(filePath);
             });
         });
     });

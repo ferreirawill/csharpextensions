@@ -1,9 +1,10 @@
-import { Uri, workspace } from 'vscode';
+import * as path from 'path';
 import { Parser } from 'xml2js';
 import { log } from '../util';
 
 import { Csproj, PropertyGroup, Using } from './csproj';
 import ProjectReader from './projectReader';
+import FileHandler from '../io/fileHandler';
 
 
 export default class CsprojReader extends ProjectReader {
@@ -103,10 +104,8 @@ export default class CsprojReader extends ProjectReader {
      *
      * @returns The content of this project file
      */
-    protected async getContent(): Promise<string> {
-        const document = await workspace.openTextDocument(Uri.file(this.filePath));
-
-        return document.getText();
+    protected async getContent(filePath?: string): Promise<string> {
+        return await FileHandler.read(filePath ?? this.filePath);
     }
 
     /**
@@ -114,8 +113,8 @@ export default class CsprojReader extends ProjectReader {
      *
      * @returns The parsed xml content of this project file
      */
-    protected async getXmlContent(): Promise<Csproj> {
-        const content = await this.getContent();
+    protected async getXmlContent(filePath?: string): Promise<Csproj> {
+        const content = await this.getContent(filePath);
 
         return await this.xmlParser.parseStringPromise(content);
     }
@@ -128,7 +127,20 @@ export default class CsprojReader extends ProjectReader {
     protected async getPropertyGroups(): Promise<PropertyGroup[] | undefined> {
         const xmlContent = await this.getXmlContent();
 
-        return xmlContent?.Project?.PropertyGroup;
+        if (xmlContent?.Project?.PropertyGroup) {
+            return xmlContent?.Project?.PropertyGroup;
+        }
+
+        const importProject = xmlContent?.Project?.Import;
+        if (!importProject || importProject.length === 0) {
+            return undefined;
+        }
+
+        const cleanPath = importProject[0].$.Project.replace('\\', path.sep).replace('/', path.sep);
+        const projectPath = path.resolve(path.dirname(this.filePath), cleanPath);
+        const importXmlContent = await this.getXmlContent(projectPath);
+
+        return importXmlContent?.Project?.PropertyGroup;
     }
 
     /**
@@ -169,7 +181,7 @@ export default class CsprojReader extends ProjectReader {
             return [];
         }
 
-        const itemGroups =  xmlContent.Project.ItemGroup.filter(g => g.Using !== undefined);
+        const itemGroups = xmlContent.Project.ItemGroup.filter(g => g.Using !== undefined);
 
         const usings: Using[] = [];
         itemGroups.forEach(g => {

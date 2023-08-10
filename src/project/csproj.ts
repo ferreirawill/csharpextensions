@@ -1,15 +1,16 @@
 export interface Csproj {
-    Project: Project | undefined
+    Project?: Project
 }
 
 export interface Project {
     PropertyGroup: Array<PropertyGroup>
     ItemGroup: Array<ItemGroup>
+    Import?: Array<Import>
 }
 
 export interface PropertyGroup {
-    RootNamespace: Array<string> | undefined
-    TargetFramework: Array<string> | undefined
+    RootNamespace?: Array<string>
+    TargetFramework?: Array<string>
     ImplicitUsings?: Array<string>
 }
 
@@ -21,7 +22,15 @@ export interface Using {
     $?: UsingAttribute
 }
 
+export interface Import {
+    $: ImportAttribute
+}
+
 export interface UsingAttribute {
     Include?: string
     Remove?: string
+}
+
+export interface ImportAttribute {
+    Project: string
 }
