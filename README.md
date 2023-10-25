@@ -7,6 +7,9 @@ It can currently be found at:
 - [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=kreativ-software.csharpextensions)
 - [Open VSX](https://open-vsx.org/extension/jsw/csharpextensions).
 
+versions up to 1.7.3 will be published under this new extension: [c# Extension 1.8.0](https://marketplace.visualstudio.com/items?itemName=bard83.csharpextension).
+Please report issues using the following this [link](https://github.com/bard83/csharpextensions/issues)
+
 ## Features
 
 **Add C# Class**

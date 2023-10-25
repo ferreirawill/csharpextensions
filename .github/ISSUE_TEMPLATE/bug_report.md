@@ -7,10 +7,15 @@ assignees: ''
 
 ---
 
+**Important**
+
+Please open new issues on the following repo [csharpextensions](https://github.com/bard83/csharpextensions/issues)
+
 **Describe the bug**
 A clear and concise description of what the bug is.
 
 **Context**
+
 - The version of the extension
 - The version of VSCode
 - Your OS (Mac / Windows / Linux)
