@@ -1,10 +1,9 @@
-${namespaces}namespace ${namespace}
+${namespaces}namespace ${namespace};
+
+public sealed partial class ${classname} : UserControl
 {
-    public sealed partial class ${classname} : UserControl
+    public ${classname}()
     {
-        public ${classname}()
-        {
-            this.InitializeComponent();${cursor}
-        }
+        this.InitializeComponent();${cursor}
     }
 }

@@ -1,16 +1,15 @@
-${namespaces}namespace ${namespace}
+${namespaces}namespace ${namespace};
+
+public class ${classname} : PageModel
 {
-    public class ${classname} : PageModel
+    private readonly ILogger<${classname}> _logger;
+
+    public ${classname}(ILogger<${classname}> logger)
     {
-        private readonly ILogger<${classname}> _logger;
+        _logger = logger;
+    }
 
-        public ${classname}(ILogger<${classname}> logger)
-        {
-            _logger = logger;
-        }
-
-        public void OnGet()
-        {
-        }
+    public void OnGet()
+    {
     }
 }
